@@ -223,8 +223,8 @@ function pageTransit(){let cities=new Set(filtered.map(r=>norm(r.Cidade)).filter
 function issue(r){let a=parseDate(r['Data Solicitação']),b=parseDate(r['Data Coleta']),c=parseDate(r['Chegada Diadema']),d=parseDate(r['Chegada Hyundai']);return ((!valid(r.NFD)&&r.__tipo==='COLETA')?'NFD ausente':!valid(r['CT-e'])?'CT-e ausente':a&&b&&b<a?'Coleta anterior à solicitação':b&&c&&c<b?'XD anterior à coleta':c&&d&&d<c?'Entrega anterior ao XD':upper(r['Status Final'])==='0X2A'?'Status inválido':null)}function pageQual(){filtered.forEach(r=>r.__issue=issue(r)||'Sem inconsistência crítica');return `<div class="cards">${card('Total processos',filtered.length,'var(--blue)')}${card('Com inconsistência',ccount(r=>issue(r)!=null),'var(--red)')}${card('Sem inconsistência',ccount(r=>issue(r)==null),'var(--green)')}${card('NFD ausente',ccount(r=>!valid(r.NFD)&&r.__tipo==='COLETA'),'var(--yellow)')}${card('CT-e ausente',ccount(r=>!valid(r['CT-e'])),'var(--yellow)')}${card('Cidade ausente',ccount(r=>!valid(r.Cidade)),'var(--yellow)')}${card('Status inválido',ccount(r=>upper(r['Status Final'])==='0X2A'),'var(--red)')}</div><div class="grid2">${chartPanel('pIssue','Pareto de inconsistências','__issue')}${chartPanel('pIUF','Pareto de inconsistências por UF','UF',r=>issue(r)!=null)}${visualPanel('pICity','Inconsistências por cidade','horizontal')}${visualPanel('pIType','Inconsistências por tipo','pie')}</div>${table('Detalhamento completo da aba CONJUNTA')}`}
 function renderAll(rebuild=true){renderNavigation();if(rebuild)buildFilters();document.querySelectorAll('.page').forEach(x=>x.remove());let sec=document.createElement('div');sec.className='page active';sec.innerHTML=current==='geral'?pageGeral():current==='pendencias'?pagePend():current==='transportadora'&&full?pageTransp():current==='transit'?pageTransit():pageQual();pages.appendChild(sec);pageTitle.textContent=pagesDef.find(x=>x[0]===current)?.[1].replace(/^.. /,'')||'Visão Geral';caseChip.textContent=filtered.length.toLocaleString('pt-BR')+' processos no filtro';let n=Object.values(selections).reduce((s,x)=>s+x.size,0);filterChip.innerHTML=n?Object.entries(selections).flatMap(([k,set])=>[...set].map(v=>`<span style="margin-right:6px">${v} <b data-rm-key="${k}" data-rm-val="${v}" style="cursor:pointer">×</b></span>`)).join(''):'Sem filtros ativos';filterChip.querySelectorAll('[data-rm-key]').forEach(x=>x.onclick=e=>{e.stopPropagation();selections[x.dataset.rmKey]?.delete(x.dataset.rmVal);activeVisual=null;apply()});stamp.textContent='Importado no painel em: '+importedAt.toLocaleDateString('pt-BR')+' às '+importedAt.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});setTimeout(()=>{if(current==='geral'){makeEvolution('evolFinal');makePie('pieStatus','__statusF');makeHorizontal('barCity','Cidade');makePareto('pUF','UF');makePie('pStage','__tipo');makePareto('pCity','Cidade');makePareto('pSLA','__slaF');if(full){makePie('pieCarrier','Transportador Responsavel');makePareto('pCarrierPend','Transportador Responsavel',isPend)}}if(current==='pendencias'){pendCharts()}if(current==='transportadora'&&full){makePareto('pTrVol','Transportador');makePareto('pTrPend','Transportador',isPend);makePareto('pTrAge','__aging',isPend);makePareto('pTrCity','Cidade')}if(current==='transit'){makeHorizontal('pTTCity','Cidade');makePareto('pTTUF','UF');makePie('pTTAging','__aging');makePie('pTTType','__tipo');if(full){makePie('pTTCarrier','Transportador Responsavel');makePareto('pTTPendCarrier','Transportador Responsavel',isPend)}}if(current==='qualidade'){makePareto('pIssue','__issue');makePareto('pIUF','UF',r=>issue(r)!=null);makeHorizontal('pICity','Cidade',r=>issue(r)!=null);makePie('pIType','__tipo',r=>issue(r)!=null)}applyVisualFocus()},0);document.querySelectorAll('[data-filter]').forEach(el=>el.onclick=e=>clickFilter(el.dataset.filter,el.dataset.val,e))}
 clearBtn.onclick=()=>{selections={};search='';globalSearch.value='';apply()};globalSearch.oninput=e=>{search=e.target.value;apply()};darkBtn.onclick=()=>{document.body.classList.toggle('dark');renderAll(false)};presentBtn.onclick=()=>{document.body.classList.toggle('pres');if(document.body.classList.contains('pres')&&full)lockView();document.documentElement.requestFullscreen?.();renderAll(false)};importBtn.onclick=()=>fileInput.click();
-fileInput.onchange=async e=>{let f=e.target.files[0];if(!f)return;importBtn.textContent='⏳ Lendo arquivo...';try{let ab=await f.arrayBuffer();let wb=XLSX.read(ab,{type:'array',cellDates:false,cellNF:false,cellText:false});let sn=wb.SheetNames.find(n=>upper(n)==='BASE')||wb.SheetNames[0];if(!sn)throw new Error('Nenhuma aba encontrada.');let ws=wb.Sheets[sn];let matrix=XLSX.utils.sheet_to_json(ws,{header:1,defval:null,raw:true});let headerRow=matrix.findIndex(row=>row.some(v=>upper(v)==='DATA SOLICITAÇÃO'));if(headerRow<0)headerRow=matrix.findIndex(row=>row.some(v=>upper(v).includes('DATA SOLIC')));if(headerRow<0)throw new Error('Não encontrei a coluna Data Solicitação. Verifique se o arquivo possui a aba Base e o cabeçalho original.');let heads=matrix[headerRow].map((v,i)=>norm(v)||`col_${i+1}`);let seen={};heads=heads.map(h=>{seen[h]=(seen[h]||0)+1;return seen[h]===1?h:`${h}_${seen[h]}`});let dateCols=new Set(['Data Recebimento','Data Solicitação','DATA EMISSÃO','Data Emissão','Prev. Coleta','Data Coleta','Prev. Chegada XD','Chegada Diadema','Prev. Chegada Final','Chegada Hyundai','PREVISÃO SLA + 7D','PREVISÃO 20D']);function excelDate(v){if(v instanceof Date)return v.toISOString().slice(0,10);if(typeof v==='number'&&v>20000&&v<80000){let d=new Date(Date.UTC(1899,11,30)+v*86400000);return d.toISOString().slice(0,10)}if(typeof v==='string'){let m=v.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);if(m)return `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`}return v}let arr=[];for(let i=headerRow+1;i<matrix.length;i++){let row=matrix[i];if(!row||!row.some(valid))continue;let o={};heads.forEach((h,j)=>{if(!h.startsWith('col_'))o[h]=dateCols.has(h)?excelDate(row[j]):row[j]});if(valid(o['Data Solicitação']))arr.push(enrich(o))}if(!arr.length)throw new Error('O arquivo foi aberto, mas nenhum processo válido foi encontrado abaixo do cabeçalho.');data=arr;filtered=[...data];let slaName=wb.SheetNames.find(n=>upper(n)==='SLA');if(slaName){let sm=XLSX.utils.sheet_to_json(wb.Sheets[slaName],{header:1,defval:'',raw:false});if(sm.length>2){let sh=sm[0].map(h=>norm(h).replace(/\s+/g,' '));let sr=sm.slice(2).filter(row=>valid(row[1])).map(row=>{let o={};sh.forEach((h,j)=>{if(h)o[h]=row[j]});return o});if(sr.length)SLA_RULES=sr}}
-let apoioName=wb.SheetNames.find(n=>upper(n)==='APOIO');if(apoioName){let am=XLSX.utils.sheet_to_json(wb.Sheets[apoioName],{header:1,defval:null,raw:true});let ah=am[0].map((v,i)=>norm(v)||`col_${i+1}`);let aa=[];for(let i=1;i<am.length;i++){if(!am[i].some(valid))continue;let o={};ah.forEach((h,j)=>{if(!h.startsWith('col_'))o[h]=h==='Feriado'?excelDate(am[i][j]):am[i][j]});aa.push(o)}APOIO.splice(0,APOIO.length,...aa)}loadExtra(wb,excelDate);selPend={};pageSel={};selGeral=null;openF=null;buildJourney();importedAt=new Date(f.lastModified||Date.now());let now=latestDate(),cy=String(now.getFullYear()),cm=String(now.getMonth()+1).padStart(2,'0'),monthVal=[...new Set(data.map(r=>r.__month))].find(v=>String(v).startsWith(cm+' -'));selections={__year:new Set([cy]),...(monthVal?{__month:new Set([monthVal])}:{})};search='';globalSearch.value='';current='geral';full=false;lockBtn.textContent='🔒 Visão Cliente';apply();buildFilters();if(!window.__autoLoading)alert(`Arquivo reconhecido com sucesso!\n\n${data.length.toLocaleString('pt-BR')} processos carregados\nAba utilizada: ${sn}\nCabeçalho localizado na linha ${headerRow+1}`)}catch(err){console.error(err);alert('Não foi possível reconhecer o arquivo.\n\nMotivo: '+err.message+'\n\nFormatos aceitos: XLSB, XLS, XLSX e CSV. Para a planilha de reversa, mantenha a aba Base e a coluna Data Solicitação.')}finally{importBtn.textContent='↑ Importar XLSB/CSV/XLS/XLSX';fileInput.value=''}};
+fileInput.onchange=async e=>{let f=e.target.files[0];if(!f)return;importBtn.textContent='⏳ Lendo arquivo...';try{let wb=e.workbook||XLSX.read(await f.arrayBuffer(),{type:'array',cellDates:false,cellNF:false,cellText:false});let sn=wb.SheetNames.find(n=>upper(n)==='BASE')||wb.SheetNames[0];if(!sn)throw new Error('Nenhuma aba encontrada.');let ws=wb.Sheets[sn];let matrix=XLSX.utils.sheet_to_json(ws,{header:1,defval:null,raw:true});let headerRow=matrix.findIndex(row=>row.some(v=>upper(v)==='DATA SOLICITAÇÃO'));if(headerRow<0)headerRow=matrix.findIndex(row=>row.some(v=>upper(v).includes('DATA SOLIC')));if(headerRow<0)throw new Error('Não encontrei a coluna Data Solicitação. Verifique se o arquivo possui a aba Base e o cabeçalho original.');let heads=matrix[headerRow].map((v,i)=>norm(v)||`col_${i+1}`);let seen={};heads=heads.map(h=>{seen[h]=(seen[h]||0)+1;return seen[h]===1?h:`${h}_${seen[h]}`});let dateCols=new Set(['Data Recebimento','Data Solicitação','DATA EMISSÃO','Data Emissão','Prev. Coleta','Data Coleta','Prev. Chegada XD','Chegada Diadema','Prev. Chegada Final','Chegada Hyundai','PREVISÃO SLA + 7D','PREVISÃO 20D']);function excelDate(v){if(v instanceof Date)return v.toISOString().slice(0,10);if(typeof v==='number'&&v>20000&&v<80000){let d=new Date(Date.UTC(1899,11,30)+v*86400000);return d.toISOString().slice(0,10)}if(typeof v==='string'){let m=v.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);if(m)return `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`}return v}let arr=[];for(let i=headerRow+1;i<matrix.length;i++){let row=matrix[i];if(!row||!row.some(valid))continue;let o={};heads.forEach((h,j)=>{if(!h.startsWith('col_'))o[h]=dateCols.has(h)?excelDate(row[j]):row[j]});if(valid(o['Data Solicitação']))arr.push(enrich(o))}if(!arr.length)throw new Error('O arquivo foi aberto, mas nenhum processo válido foi encontrado abaixo do cabeçalho.');data=arr;filtered=[...data];let slaName=wb.SheetNames.find(n=>upper(n)==='SLA');if(slaName){let sm=XLSX.utils.sheet_to_json(wb.Sheets[slaName],{header:1,defval:'',raw:false});if(sm.length>2){let sh=sm[0].map(h=>norm(h).replace(/\s+/g,' '));let sr=sm.slice(2).filter(row=>valid(row[1])).map(row=>{let o={};sh.forEach((h,j)=>{if(h)o[h]=row[j]});return o});if(sr.length)SLA_RULES=sr}}
+let apoioName=wb.SheetNames.find(n=>upper(n)==='APOIO');if(apoioName){let am=XLSX.utils.sheet_to_json(wb.Sheets[apoioName],{header:1,defval:null,raw:true});let ah=am[0].map((v,i)=>norm(v)||`col_${i+1}`);let aa=[];for(let i=1;i<am.length;i++){if(!am[i].some(valid))continue;let o={};ah.forEach((h,j)=>{if(!h.startsWith('col_'))o[h]=h==='Feriado'?excelDate(am[i][j]):am[i][j]});aa.push(o)}APOIO.splice(0,APOIO.length,...aa)}loadExtra(wb,excelDate);selPend={};pageSel={};selGeral=null;openF=null;if(!e.deferRender)buildJourney();importedAt=new Date(f.lastModified||Date.now());let now=latestDate(),cy=String(now.getFullYear()),cm=String(now.getMonth()+1).padStart(2,'0'),monthVal=[...new Set(data.map(r=>r.__month))].find(v=>String(v).startsWith(cm+' -'));selections={__year:new Set([cy]),...(monthVal?{__month:new Set([monthVal])}:{})};search='';globalSearch.value='';current='geral';full=false;lockBtn.textContent='🔒 Visão Cliente';if(!e.deferRender){apply();buildFilters()}if(!window.__autoLoading)alert(`Arquivo reconhecido com sucesso!\n\n${data.length.toLocaleString('pt-BR')} processos carregados\nAba utilizada: ${sn}\nCabeçalho localizado na linha ${headerRow+1}`)}catch(err){console.error(err);if(e.deferRender)throw err;alert('Não foi possível reconhecer o arquivo.\n\nMotivo: '+err.message+'\n\nFormatos aceitos: XLSB, XLS, XLSX e CSV. Para a planilha de reversa, mantenha a aba Base e a coluna Data Solicitação.')}finally{importBtn.textContent='↑ Importar XLSB/CSV/XLS/XLSX';fileInput.value=''}};
 function csv(){let cols=Object.keys(data[0]||{}).filter(c=>!c.startsWith('__')&&(full||!protectedCols.includes(c))),esc=v=>'"'+norm(v).replaceAll('"','""')+'"',txt='\ufeff'+cols.map(esc).join(';')+'\n'+filtered.map(r=>cols.map(c=>esc(r[c])).join(';')).join('\n'),blob=new Blob([txt],{type:'text/csv;charset=utf-8'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`controle_reversa_${full?'completo':'cliente'}_${filtered.length}.csv`;a.click();URL.revokeObjectURL(a.href)}exportBtn.onclick=csv;
 lockBtn.onclick=()=>full?lockView():lockModal.classList.add('show');unlock.onclick=()=>{if(pwd.value==='152535'){full=true;pwd.value='';pwderr.textContent='';lockModal.classList.remove('show');lockBtn.textContent='🔓 Visão Completa';renderAll()}else pwderr.textContent='Senha incorreta'};function lockView(){full=false;if(current==='transportadora'||current==='qualidade')current='geral';delete selections.Transportador;lockBtn.textContent='🔒 Visão Cliente';renderAll()}
 window.addEventListener('keydown',e=>{if(e.key==='Escape'&&document.body.classList.contains('pres')){document.body.classList.remove('pres');renderAll(false)}});
@@ -253,9 +253,9 @@ function loadExtra(wb,xd){[CON_N,CON_C,CON_F,SAC_N,SAC_F].forEach(m=>m.clear());
  rd('SAC').slice(1).forEach(w=>{if(!valid(w[3])&&!valid(w[14]))return;let o={owner:w[0],nf:w[3],dealer:w[5],cat:w[8],prob:w[9],acao:w[10],ownerAcao:w[11],setor:w[12],nfd:w[14],status:w[16],data:xd(w[6])};let a=kx(o.nfd),f=kx(o.nf);if(a&&!SAC_N.has(a))SAC_N.set(a,o);if(f){if(SAC_F.has(f))dupS.add(f);else SAC_F.set(f,o)}});
  dupS.forEach(k=>SAC_F.delete(k))}
 function addD(a,n){let d=new Date(a+'T00:00:00');d.setDate(d.getDate()+n);return isoD(d)}
-function addDU(a,n){let d=new Date(a+'T00:00:00');while(n>0){d.setDate(d.getDate()+1);let w=d.getDay();if(w&&w<6&&!HOLS.has(isoD(d)))n--}return isoD(d)}
+function addDU(a,n){let d=new Date(String(a||'')+'T00:00:00');n=Number(n);if(!Number.isFinite(d.getTime())||!Number.isFinite(n)||n<=0)return '';n=Math.min(Math.ceil(n),3660);let guard=0;while(n>0&&guard<6000){d.setDate(d.getDate()+1);let w=d.getDay();if(w&&w<6&&!HOLS.has(isoD(d)))n--;guard++}return Number.isFinite(d.getTime())?isoD(d):''}
 const dcal=(a,b)=>Math.max(0,Math.round((b-new Date(a+'T00:00:00'))/864e5));
-function dub(a,b){let d=new Date(a+'T00:00:00'),n=0;while(d<b){d.setDate(d.getDate()+1);let w=d.getDay();if(w&&w<6&&!HOLS.has(isoD(d)))n++}return n}
+function dub(a,b){const start=new Date(a+'T00:00:00');if(!Number.isFinite(start.getTime())||!b||!Number.isFinite(b.getTime())||b<=start)return 0;const end=new Date(b);end.setHours(0,0,0,0);const first=new Date(start);first.setDate(first.getDate()+1);first.setHours(0,0,0,0);const total=Math.max(0,Math.floor((end-first)/864e5)+1);const weeks=Math.floor(total/7);let n=weeks*5;for(let i=weeks*7;i<total;i++){const d=new Date(first);d.setDate(first.getDate()+i);const w=d.getDay();if(w&&w<6)n++}for(const h of HOLS){const d=new Date(h+'T00:00:00');if(d>=first&&d<=end){const w=d.getDay();if(w&&w<6)n--}}return Math.max(0,n)}
 const cls=(v,t)=>v<=t[0]?'No Prazo':v<=t[1]?'Atenção':v<=t[2]?'Atrasado':v<=t[3]?'Busca e Resgate':'Extravio';
 const STG=[['Aguarda NFD',/AGUARDA NFD/],['Emissão CT-e',/EMISSAO/],['Coleta realizada',/COLETA REALIZ/],['Entrega CD',/ENTREGA CD/]];
 const ruleFor=et=>{let g=STG.find(x=>x[0]===et);return g?SLA_RULES.find(x=>g[1].test(dn(x.Etapa))):null};
@@ -468,156 +468,44 @@ Chart.register({id:'zoomFix',beforeEvent(ch,args){let n=args.event.native;if(!n|
 renderAll();
 /* Carregamento automatico da planilha hospedada ao lado do index.html no GitHub Pages.
    A planilha continua fora do HTML. O parametro de versao evita dados antigos em cache. */
-const sitBaseLoader=fileInput.onchange;
-fileInput.onchange=async e=>{
-  const file=e.target.files?.[0];
-  if(!file)return;
-  const wasAutoLoading=window.__autoLoading;
-  window.__autoLoading=true;
-  try{
-    const workbook=XLSX.read(await file.arrayBuffer(),{type:'array',cellDates:false,cellNF:false,cellText:false});
-    const jointName=workbook.SheetNames.find(name=>upper(name)==='CONJUNTA');
-    if(!jointName)throw new Error('A planilha não contém a aba CONJUNTA.');
-    const jointRows=XLSX.utils.sheet_to_json(workbook.Sheets[jointName],{header:1,defval:null,raw:true});
-    const dateValue=value=>{
-      if(value instanceof Date)return value.toISOString().slice(0,10);
-      if(typeof value==='number'&&value>20000&&value<80000)return new Date(Date.UTC(1899,11,30)+value*86400000).toISOString().slice(0,10);
-      if(typeof value==='string'){
-        const match=value.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-        if(match)return `${match[3]}-${match[2].padStart(2,'0')}-${match[1].padStart(2,'0')}`;
-      }
-      return value;
-    };
-    const primaryRows=jointRows.slice(4).filter(row=>typeof row[0]==='number');
-    if(!primaryRows.length)throw new Error('A aba CONJUNTA não contém processos válidos a partir da linha 5.');
+/* CARREGADOR UNICO: le o arquivo uma vez e processa cada aba uma vez. */
+const loaderYield=()=>new Promise(resolve=>setTimeout(resolve,20));
+const loaderDate=value=>{if(value instanceof Date)return value.toISOString().slice(0,10);if(typeof value==='number'&&value>20000&&value<80000)return new Date(Date.UTC(1899,11,30)+value*86400000).toISOString().slice(0,10);if(typeof value==='string'){const m=value.trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);if(m)return `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`}return value};
+const loaderMatrix=(wb,name)=>{const sn=wb.SheetNames.find(n=>upper(n)===upper(name));return sn?XLSX.utils.sheet_to_json(wb.Sheets[sn],{header:1,defval:null,raw:true,blankrows:false}):[]};
+function loaderObjects(matrix){let hi=matrix.findIndex(row=>row?.some(v=>upper(v)==='DATA SOLICITAÇÃO'));if(hi<0)hi=matrix.findIndex(row=>row?.some(v=>upper(v).includes('DATA SOLIC')));if(hi<0)return[];let seen={},heads=matrix[hi].map((v,i)=>{let h=norm(v)||`col_${i+1}`;seen[h]=(seen[h]||0)+1;return seen[h]===1?h:`${h}_${seen[h]}`});return matrix.slice(hi+1).filter(r=>r?.some(valid)).map(r=>{let o={};heads.forEach((h,i)=>{if(!h.startsWith('col_'))o[h]=/DATA|PREV|CHEGADA|COLETA|EMISSÃO/i.test(h)?loaderDate(r[i]):r[i]});return o}).filter(o=>valid(o['Data Solicitação']))}
+function uniqueMap(rows,key){let m=new Map(),dup=new Set();for(const r of rows){let k=kx(key(r)).replace(/^0+/,'');if(!k)continue;if(m.has(k))dup.add(k);else m.set(k,r)}for(const k of dup)m.delete(k);return m}
+function loadSupport(wb){const am=loaderMatrix(wb,'APOIO');if(!am.length)return;let support=[];for(const row of am.slice(2)){if(valid(row[1])&&valid(row[2])){let uf=norm(row[1]),city=norm(row[2]).replace(new RegExp('^'+uf+'[_\\s]+','i'),'').replace(/_/g,' ').trim(),mm=String(row[3]??'').match(/(\d+(?:[.,]\d+)?)/),days=mm?Number(mm[1].replace(',','.')):null;support.push({Região:row[0],UF:uf,CIDADE:city,'LOGISTICA REV':row[3],LOGISTICA_DIAS:days,DEADLINE:Number(row[4])||null,ATENCAO_80:Number(row[5])||null,ATENCAO_100:Number(row[6])||null,ATRASO:Number(row[7])||null,BUSCA:Number(row[8])||null,EXTRAVIO:Number(row[9])||null,'TRANSIT TIME':days,'TRANSIT TIME REVERSA':Number(row[4])||null})}}for(const row of am.slice(1)){if(valid(row[16]))support.push({Feriado:loaderDate(row[16]),Motivo:row[17]});if(valid(row[12]))support.push({Transportador:row[12],Email:row[13]});if(valid(row[19]))support.push({Ordem:row[19],Aging:row[20]})}APOIO.splice(0,APOIO.length,...support)}
 
-    await sitBaseLoader(e);
-    const apoioName=workbook.SheetNames.find(name=>upper(name)==='APOIO');
-    const apoioMatrix=apoioName?XLSX.utils.sheet_to_json(workbook.Sheets[apoioName],{header:1,defval:null,raw:true}):[];
-    if(dn(apoioMatrix[0]?.[0])==='REGIAO'&&upper(apoioMatrix[0]?.[1])==='UF'){
-      const support=[];
-      for(const row of apoioMatrix.slice(2)){
-        if(!valid(row[1])||!valid(row[2]))continue;
-        const uf=norm(row[1]),city=norm(row[2]).replace(new RegExp('^'+uf+'[_\\s]+','i'),'').replace(/_/g,' ').trim();
-        const logistics=String(row[3]??'').match(/(\d+(?:[.,]\d+)?)/);
-        const logisticsDays=logistics?Number(logistics[1].replace(',','.')):null;
-        support.push({
-          Região:row[0],UF:uf,CIDADE:city,'LOGISTICA REV':row[3],LOGISTICA_DIAS:logisticsDays,
-          DEADLINE:Number(row[4])||null,ATENCAO_80:Number(row[5])||null,ATENCAO_100:Number(row[6])||null,
-          ATRASO:Number(row[7])||null,BUSCA:Number(row[8])||null,EXTRAVIO:Number(row[9])||null,
-          'TRANSIT TIME':logisticsDays,'TRANSIT TIME REVERSA':Number(row[4])||null
-        });
-      }
-      for(const row of apoioMatrix.slice(1)){
-        if(valid(row[16]))support.push({Feriado:dateValue(row[16]),Motivo:row[17]});
-        if(valid(row[12]))support.push({Transportador:row[12],Email:row[13]});
-        if(valid(row[19]))support.push({Ordem:row[19],Aging:row[20]});
-      }
-      APOIO.splice(0,APOIO.length,...support);
-    }
-    const sitRows=data.slice();
-    const uniqueIndex=(rows,keyOf)=>{
-      const index=new Map(),duplicates=new Set();
-      rows.forEach(row=>{
-        const key=kx(keyOf(row)).replace(/\D/g,'').replace(/^0+(?=\d)/,'');
-        if(!key||duplicates.has(key))return;
-        if(index.has(key)){index.delete(key);duplicates.add(key)}
-        else index.set(key,row);
-      });
-      return index;
-    };
-    const sitByNfd=uniqueIndex(sitRows,row=>row.NFD);
-    const sitByCte=uniqueIndex(sitRows,row=>row['CT-e']);
-    const sitByNf=uniqueIndex(sitRows,row=>row['NF Origem']);
-    const primaryData=primaryRows.map(row=>{
-      const id=value=>kx(value).replace(/\D/g,'').replace(/^0+(?=\d)/,''); const nfd=id(row[15]),cte=id(row[17]),nf=id(row[8]);
-      const sit=(nfd&&sitByNfd.get(nfd))||(cte&&sitByCte.get(cte))||(nf&&sitByNf.get(nf))||{};
-      const finalDate=dateValue(row[23]);
-      const jointSla=norm(row[29]);
-      const jointConcluded=/CONCLU[IÍ]DO/i.test(jointSla);
-      const jointLate=/FORA\s+DO\s+PRAZO/i.test(jointSla);
-      const slaFinal=jointConcluded?(jointLate?'REALIZADO FORA DO PRAZO':'REALIZADO NO PRAZO'):
-        jointLate?'PENDENTE FORA DO PRAZO':
-        /NO\s+PRAZO/i.test(jointSla)?'PENDENTE NO PRAZO':sit['SLA Final']||'';
-      const statusFinal=jointConcluded||valid(finalDate)?'Entregue':
-        /NO\s+PRAZO/i.test(jointSla)?'Pendente No Prazo':
-        jointLate?'Pendente Fora do Prazo':
-        valid(sit['Status Final'])?sit['Status Final']:
-        !valid(row[15])?'Pendente NFD':
-        !valid(row[17])?'Pendente CT-e':
-        !valid(row[19])?'Pendente coleta':
-        !valid(row[21])&&!semXD({UF:row[4],Cidade:row[5]})?'Pendente entrega ao XD':'Pendente entrega final';
-      const normalized={
-        ...sit,
-        'Data Recebimento':dateValue(row[12]),
-        'Data Solicitação':dateValue(row[13]),
-        'NF Origem':row[8],
-        NFD:row[15],
-        'CT-e':row[17],
-        Remetente:row[2],
-        Cidade:row[5],
-        UF:row[4],
-        Transportador:row[3],
-        'Prev. Coleta':dateValue(row[18]),
-        'Data Coleta':dateValue(row[19]),
-        Ocorrência:row[20],
-        'Chegada Diadema':dateValue(row[21]),
-        'Chegada Hyundai':finalDate,
-        'Prev. Chegada Final':dateValue(row[28]),
-        'SLA Final':slaFinal,
-        'Status Final':statusFinal,
-        Observação:row[27],
-        'Transportador Responsavel':sit['Transportador Responsavel']||row[3],
-        'Valor NF':row[33]
-      };
-      return enrich(normalized);
-    });
-    data=primaryData;
-    filtered=data.slice();
-    buildJourney();
-    selections={};
-    current='geral';
-    full=false;
-    lockBtn.textContent='🔒 Visão Cliente';
-    search='';
-    globalSearch.value='';
-    apply();
-    buildFilters();
-    if(!wasAutoLoading)alert(`Arquivo reconhecido com sucesso!\n\n${data.length.toLocaleString('pt-BR')} processos carregados da aba CONJUNTA\nA SIT foi usada apenas como complemento para campos disponíveis.`);
-  }catch(err){
-    console.error('Falha ao carregar a aba CONJUNTA como fonte principal:',err);
-    alert('Não foi possível carregar a aba CONJUNTA como fonte principal.\n\nMotivo: '+err.message);
-  }finally{
-    window.__autoLoading=wasAutoLoading;
-    importBtn.textContent='↑ Importar XLSB/CSV/XLS/XLSX';
-    fileInput.value='';
-  }
-};
-async function autoLoadRepoData(){
-  const repoFileName='Controle Reversa - Hyundai .xlsb';
-  const statusOriginal=importBtn.textContent;
-  try{
-    window.__autoLoading=true;
-    importBtn.textContent='⏳ Carregando base...';
-    const url='./'+encodeURIComponent(repoFileName).replace(/%2F/g,'/')+'?v='+Date.now();
-    const response=await fetch(url,{cache:'no-store'});
-    if(!response.ok)throw new Error(`HTTP ${response.status} ao carregar ${repoFileName}`);
-    const blob=await response.blob();
-    const modified=response.headers.get('last-modified');
-    const file=new File([blob],repoFileName,{
-      type:'application/vnd.ms-excel.sheet.binary.macroEnabled.12',
-      lastModified:modified?new Date(modified).getTime():Date.now()
-    });
-    await fileInput.onchange({target:{files:[file]}});
-  }catch(err){
-    console.error('Falha no carregamento automatico da base:',err);
-    importBtn.textContent=statusOriginal;
-    alert('O painel abriu, mas não conseguiu carregar automaticamente a base do repositório.\n\n'+
-          'Verifique se o arquivo está na mesma pasta do index.html e mantém exatamente este nome:\n'+
-          repoFileName+'\n\nDetalhe: '+err.message);
-  }finally{
-    window.__autoLoading=false;
-  }
+async function buildJourneyAsync(){
+ HOLS=new Set(APOIO.map(r=>iso(r.Feriado)).filter(Boolean));TT=new Map();
+ APOIO.forEach(r=>{if(valid(r.UF)&&valid(r.CIDADE))TT.set(dn(r.UF)+'|'+dn(r.CIDADE),{deadline:Number(r.DEADLINE??r['TRANSIT TIME REVERSA'])||null,attention80:Number(r.ATENCAO_80)||null,attention100:Number(r.ATENCAO_100)||null,delay:Number(r.ATRASO)||null,rescue:Number(r.BUSCA)||null,extravio:Number(r.EXTRAVIO)||null})});
+ let today=new Date();today.setHours(0,0,0,0);
+ const total=data.length,batch=20;
+ for(let i=0;i<total;i+=batch){
+  for(let j=i;j<Math.min(i+batch,total);j++){let r=data[j];journey(r,today);let x=upper(r['SLA Final']);r.__statusBI=x==='REALIZADO NO PRAZO'?'Concluído no prazo':x==='REALIZADO FORA DO PRAZO'?'Concluído fora do prazo':x==='PENDENTE NO PRAZO'?'Pendente no prazo':x==='PENDENTE FORA DO PRAZO'?'Pendente fora do prazo':r.__statusF||'Não classificado'}
+  importBtn.textContent='⏳ 5/5 Montando painel '+Math.min(i+batch,total).toLocaleString('pt-BR')+'/'+total.toLocaleString('pt-BR')+'...';
+  await new Promise(resolve=>setTimeout(resolve,0));
+ }
 }
+async function loadWorkbookFile(file){
+ const auto=window.__autoLoading;window.__autoLoading=true;
+ try{
+  importBtn.textContent='⏳ 1/5 Abrindo arquivo...';await loaderYield();
+  const wb=XLSX.read(await file.arrayBuffer(),{type:'array',cellDates:false,cellNF:false,cellText:false,dense:true});
+  importBtn.textContent='⏳ 2/5 Lendo CONJUNTA...';await loaderYield();
+  const jm=loaderMatrix(wb,'CONJUNTA');if(!jm.length)throw new Error('Aba CONJUNTA não encontrada.');
+  const rows=jm.slice(4).filter(r=>/^\d+(?:[.,]0+)?$/.test(String(r?.[0]??'').trim()));if(!rows.length)throw new Error('Nenhum processo numérico encontrado na coluna A a partir da linha 5.');
+  importBtn.textContent='⏳ 3/5 Lendo SIT e APOIO...';await loaderYield();
+  const sit=loaderObjects(loaderMatrix(wb,'SIT'));loadSupport(wb);loadExtra(wb,loaderDate);
+  const byNfd=uniqueMap(sit,r=>r.NFD),byCte=uniqueMap(sit,r=>r['CT-e']),byNf=uniqueMap(sit,r=>r['NF Origem']);
+  importBtn.textContent='⏳ 4/5 Consolidando '+rows.length.toLocaleString('pt-BR')+' processos...';await loaderYield();
+  data=rows.map(row=>{const nfd=kx(row[15]).replace(/^0+/,''),cte=kx(row[17]||row[16]).replace(/^0+/,''),nf=kx(row[8]).replace(/^0+/,'');const base=(nfd&&byNfd.get(nfd))||(cte&&byCte.get(cte))||(nf&&byNf.get(nf))||{};const js=norm(row[29]),done=/CONCLU[IÍ]DO/i.test(js),late=/FORA\s+DO\s+PRAZO/i.test(js),finalDate=loaderDate(row[23]);const sla=done?(late?'REALIZADO FORA DO PRAZO':'REALIZADO NO PRAZO'):late?'PENDENTE FORA DO PRAZO':/NO\s+PRAZO/i.test(js)?'PENDENTE NO PRAZO':base['SLA Final']||'';const status=done||valid(finalDate)?'Entregue':/NO\s+PRAZO/i.test(js)?'Pendente No Prazo':late?'Pendente Fora do Prazo':base['Status Final']||(!valid(row[15])?'Pendente NFD':!valid(row[17]||row[16])?'Pendente CT-e':!valid(row[19])?'Pendente coleta':!valid(row[21])&&!semXD({UF:row[4],Cidade:row[5]})?'Pendente entrega ao XD':'Pendente entrega final');return enrich({...base,Processo:row[0],DN:row[1],Remetente:row[2],Transportador:row[3],UF:row[4],Cidade:row[5],'Pedido TOTVS':row[6],'Pedido AUTOWARE':row[7],'NF Origem':row[8],Tipo:row[9],'Categoria Problema':row[10],'Problema Detalhado':row[11],'Data Recebimento':loaderDate(row[12]),'Data Solicitação':loaderDate(row[13]),'Data NFD':loaderDate(row[14]),NFD:row[15],'CT-e Origem':row[16],'CT-e':row[17]||row[16],'Prev. Coleta':loaderDate(row[18]),'Data Coleta':loaderDate(row[19]),Ocorrência:row[20],'Chegada Diadema':loaderDate(row[21]),'Envio Araçariguama':loaderDate(row[22]),'Chegada Hyundai':finalDate,Conferência:loaderDate(row[24]),'NFD Lançada':loaderDate(row[25]),'Status Automático':row[26],Observação:row[27],'Prev. Chegada Final':loaderDate(row[28]),'SLA Final':sla,'Status Final':status,'Dias sem Atualiz.':row[30],Alerta:row[31],Região:row[32],'Valor NF':row[33],'Transportador Responsavel':base['Transportador Responsavel']||row[3],__fonte:'CONJUNTA'})});
+  filtered=data.slice();importedAt=new Date(file.lastModified||Date.now());
+  importBtn.textContent='⏳ 5/5 Montando painel 0/'+data.length.toLocaleString('pt-BR')+'...';await loaderYield();await buildJourneyAsync();selections={};pageSel={};selGeral=null;current='geral';full=false;search='';globalSearch.value='';lockBtn.textContent='🔒 Visão Cliente';apply();
+  if(!auto)alert(`Arquivo reconhecido com sucesso!\n\n${data.length.toLocaleString('pt-BR')} processos carregados\nCONJUNTA principal + SIT/APOIO/SLA/SAC complementares.`)
+ }catch(err){console.error('Carregador único:',err);alert('Não foi possível carregar a base.\n\n'+err.message)}finally{window.__autoLoading=auto;importBtn.textContent='↑ Importar XLSB/CSV/XLS/XLSX';fileInput.value=''}
+}
+fileInput.onchange=e=>{const f=e.target.files?.[0];if(f)loadWorkbookFile(f)};
+async function autoLoadRepoData(){if(location.protocol==='file:')return;const name='Controle Reversa - Hyundai .xlsb';try{window.__autoLoading=true;importBtn.textContent='⏳ Baixando base...';const res=await fetch('./'+encodeURIComponent(name)+'?v='+Date.now(),{cache:'no-store'});if(!res.ok)throw new Error(`HTTP ${res.status}`);const blob=await res.blob();await loadWorkbookFile(new File([blob],name,{type:'application/vnd.ms-excel.sheet.binary.macroEnabled.12',lastModified:Date.now()}))}catch(err){console.error(err);importBtn.textContent='↑ Importar XLSB/CSV/XLS/XLSX'}finally{window.__autoLoading=false}}
 autoLoadRepoData();
 </script></body></html>

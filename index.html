@@ -879,4 +879,36 @@ timelineBody=function(r){
  return `<div class="tl-summary"><div class="tl-status ${late?'late':''}"><small>Status atual</small><strong>${tlSafe(status)}</strong></div><div><small>NF de origem</small><strong>${tlSafe(nf)}</strong></div><div><small>NFD</small><strong>${tlSafe(nfdNo||'—')}</strong></div><div><small>Tipo</small><strong>${tlSafe(tipo)}</strong></div><div><small>Previsão de coleta</small><strong>${tlDate(r['Prev. Coleta'])}</strong></div><div><small>Previsão Hyundai</small><strong>${tlDate(prevFinal)}</strong></div><div><small>Tempo na etapa</small><strong>${safeDays} dia(s)</strong></div></div><div class="tl-track-wrap"><div class="tl-track">${steps}</div></div><div class="tl-foot"><div class="tl-client-note"><small>Comunicação ao cliente</small><b>${msg}</b></div><div><small>Última atualização</small><b>${tlDate(r.__inicio||fin||env||xd||col||nfdDate||sol)}</b></div><div><small>Origem</small><b>${tlSafe((norm(r.Cidade)||'—')+' / '+(norm(r.UF)||'—'))}</b></div><div><small>Destino</small><b>Hyundai • Araçariguama</b></div></div>`;
 };
 </script>
+
+<script id="timelinePendingOnlyV53">
+/* Na página Pendências, documentos duplicados são resolvidos somente entre registros realmente pendentes. */
+function tlPendingCandidates(q){
+ q=dn(q);if(!q)return [];
+ const rows=(data||[]).filter(isPend);
+ const exact=rows.filter(r=>[r['NF Origem'],r.NFD,r['CT-e'],r.Processo].some(v=>valid(v)&&dn(v)===q));
+ return exact.length?exact:rows.filter(r=>matchQ(r,q));
+}
+function tlPendingPriority(r){
+ const status=upper(r['Status Final']),sla=upper(r['SLA Final']);
+ let score=0;
+ if(status.includes('PENDENTE'))score+=100;
+ if(sla.includes('PENDENTE'))score+=80;
+ if(!valid(r['Chegada Hyundai'])&&!valid(r.__m?.fin?.v))score+=40;
+ score+=(Number(r.__sev)||0)*5+(Number(r.__dias)||0)/1000;
+ return score;
+}
+tlFind=function(q){
+ const rows=tlPendingCandidates(q);
+ return rows.sort((a,b)=>tlPendingPriority(b)-tlPendingPriority(a))[0]||null;
+};
+tlRows=function(){return (filtered||[]).filter(isPend)};
+tlOptions=function(){
+ const rows=tlRows().slice().sort((a,b)=>tlPendingPriority(b)-tlPendingPriority(a)).slice(0,800),sel=timelineSelectedId;
+ return '<option value="">Selecione uma pendência do filtro atual</option>'+rows.map(r=>{let id=tlId(r),lab=`NF ${norm(r['NF Origem'])||'—'} • NFD ${norm(r.NFD)||'—'} • ${norm(r.Cidade)||'Sem cidade'}/${norm(r.UF)||'—'} • ${r.__etapa||'Etapa não definida'}`;return `<option value="${tlSafe(id)}" ${id===sel?'selected':''}>${tlSafe(lab)}</option>`}).join('');
+};
+timelineSearch=function(){
+ const v=document.getElementById('timelineSearchInput')?.value.trim();if(!v)return;
+ const r=tlFind(v);if(r)timelineSelect(tlId(r));else alert('Nenhuma pendência encontrada para este documento no filtro atual.');
+};
+</script>
 </body></html>

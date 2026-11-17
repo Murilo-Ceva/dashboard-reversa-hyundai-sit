@@ -569,7 +569,7 @@ async function loadWorkbookFile(file){
  }catch(err){console.error('Carregador único:',err);alert('Não foi possível carregar a base.\n\n'+err.message)}finally{window.__autoLoading=auto;importBtn.textContent='↑ Importar XLSB/CSV/XLS/XLSX';fileInput.value=''}
 }
 fileInput.onchange=e=>{const f=e.target.files?.[0];if(f)loadWorkbookFile(f)};
-async function autoLoadRepoData(){if(location.protocol==='file:')return;const name='Controle Reversa - Hyundai .xlsb';try{window.__autoLoading=true;importBtn.textContent='⏳ Baixando base...';const res=await fetch('./'+encodeURIComponent(name)+'?v='+Date.now(),{cache:'no-store'});if(!res.ok)throw new Error(`HTTP ${res.status}`);const blob=await res.blob();await loadWorkbookFile(new File([blob],name,{type:'application/vnd.ms-excel.sheet.binary.macroEnabled.12',lastModified:Date.now()}))}catch(err){console.error(err);importBtn.textContent='↑ Importar XLSB/CSV/XLS/XLSX'}finally{window.__autoLoading=false}}
+async function autoLoadRepoData(){if(location.protocol==='file:')return;const name='Controle Reversa - Hyundai .xlsb';try{window.__autoLoading=true;importBtn.textContent='⏳ Baixando base...';const res=await fetch('./'+encodeURIComponent(name)+'?v='+Date.now(),{cache:'no-store'});if(!res.ok)throw new Error(`HTTP ${res.status}`);const blob=await res.blob();const lm=res.headers.get('Last-Modified'),savedAt=lm&&Number.isFinite(Date.parse(lm))?Date.parse(lm):Date.now();await loadWorkbookFile(new File([blob],name,{type:'application/vnd.ms-excel.sheet.binary.macroEnabled.12',lastModified:savedAt}))}catch(err){console.error(err);importBtn.textContent='↑ Importar XLSB/CSV/XLS/XLSX'}finally{window.__autoLoading=false}}
 autoLoadRepoData();
 
 let presTimer=null,presPaused=false;const presOrder=['geral','pendencias','transit'];
@@ -598,7 +598,7 @@ function timelineSelect(v,scroll=true){let r=tlFind(v);if(!r)return;timelineSele
 function timelineSearch(){let v=document.getElementById('timelineSearchInput')?.value.trim();if(!v)return;let r=tlFind(v);if(r)timelineSelect(tlId(r));else alert('Processo não encontrado na base atual.')}
 function timelineAutoFromFilter(){let r=tlRows().sort((a,b)=>(b.__sev-a.__sev)||(b.__dias-a.__dias))[0];if(r)timelineSelect(tlId(r),false)}
 function timelineStep(label,value,prev,current,late,meta,skip=false){let has=!!tlDateVal(value),cls=skip?'skip':has?'done':current?(late?'late':'current'):'',icon=skip?'−':has?'✓':late?'!':'•',delta=has&&prev?tlDays(prev,value):null,badge=skip?'Não se aplica':has?(delta===null?'Concluído':delta+' dia(s)'):(current?(late?'Atenção necessária':'Em andamento'):'Aguardando');return `<div class="tl-step ${cls}"><div class="tl-dot">${icon}</div><h4>${label}</h4><div class="tl-date">${skip?'Fluxo direto':tlDate(value)}</div><div class="tl-meta">${tlSafe(meta||'')}</div><span class="tl-badge">${badge}</span></div>`}
-function timelineBody(r){let m=r.__m||{},sol=r['Data Solicitação']||r['Data Recebimento'],nfd=m.dtNFD?.v||r['Data NFD'],cte=m.cte?.v? nfd:null,col=m.col?.v||r['Data Coleta'],xd=m.xd?.v||r['Chegada Diadema'],env=r['Envio Araçariguama'],fin=m.fin?.v||r['Chegada Hyundai'],sem=!!r.__semXD,vals=[sol,nfd,cte,col,xd,env,fin],firstMissing=vals.findIndex((v,i)=>!tlDateVal(v)&&!(sem&&i===4));if(firstMissing<0)firstMissing=6;let prevFinal=r['Prev. Chegada Final'],late=upper(r['SLA Final']).includes('FORA DO PRAZO'),days=r.__dias||0,status=r.__etapa||norm(r['Status Final'])||'Em acompanhamento',nf=norm(r['NF Origem'])||'—',nfdNo=norm(m.nfd?.v||r.NFD)||'—',cteNo=norm(m.cte?.v||r['CT-e'])||'—';let steps='';steps+=timelineStep('Solicitação',sol,null,firstMissing===0,late,'Registro inicial');steps+=timelineStep('Emissão NFD',nfd,sol,firstMissing===1,late,nfdNo==='—'?'Documento pendente':'NFD '+nfdNo);steps+=timelineStep('Emissão CT-e',cte,nfd,firstMissing===2,late,cteNo==='—'?'Documento pendente':'CT-e '+cteNo);steps+=timelineStep('Coleta',col,nfd,firstMissing===3,late,'Coleta do material');steps+=timelineStep('Chegada ao XD',xd,col,firstMissing===4,late,sem?'Fluxo sem XD':'Centro de distribuição',sem);steps+=timelineStep('Transferência final',env,sem?col:xd,firstMissing===5,late,'Rumo à Hyundai');steps+=timelineStep('Chegada Hyundai',fin,env||xd||col,firstMissing===6,late,'Conclusão da jornada');let msg=late?'Prazo de referência excedido. O processo permanece em acompanhamento pela equipe responsável.':'Processo dentro do prazo de referência e em acompanhamento.';let safeDays=Number.isFinite(Number(days))?Number(days):0,tipo=norm(r.Tipo)||'—';return `<div class="tl-summary"><div class="tl-status ${late?'late':''}"><small>Status atual</small><strong>${tlSafe(status)}</strong></div><div><small>NF de origem</small><strong>${tlSafe(nf)}</strong></div><div><small>NFD</small><strong>${tlSafe(nfdNo)}</strong></div><div><small>Tipo</small><strong>${tlSafe(tipo)}</strong></div><div><small>Previsão de coleta</small><strong>${tlDate(r['Prev. Coleta'])}</strong></div><div><small>Previsão Hyundai</small><strong>${tlDate(prevFinal)}</strong></div><div><small>Tempo na etapa</small><strong>${safeDays} dia(s)</strong></div></div><div class="tl-track-wrap"><div class="tl-track">${steps}</div></div><div class="tl-foot"><div class="tl-client-note"><small>Comunicação ao cliente</small><b>${msg}</b></div><div><small>Última atualização</small><b>${tlDate(r.__inicio||fin||env||xd||col||nfd||sol)}</b></div><div><small>Origem</small><b>${tlSafe((norm(r.Cidade)||'—')+' / '+(norm(r.UF)||'—'))}</b></div><div><small>Destino</small><b>Hyundai • Araçariguama</b></div></div>`}
+function timelineBody(r){let m=r.__m||{},sol=r['Data Solicitação']||r['Data Recebimento'],nfd=m.dtNFD?.v||r['Data NFD'],cte=m.cte?.v? nfd:null,col=m.col?.v||r['Data Coleta'],xd=m.xd?.v||r['Chegada Diadema'],env=r['Envio Araçariguama'],fin=m.fin?.v||r['Chegada Hyundai'],sem=!!r.__semXD,vals=[sol,nfd,cte,col,xd,env,fin],firstMissing=vals.findIndex((v,i)=>!tlDateVal(v)&&!(sem&&i===4));if(firstMissing<0)firstMissing=6;let prevFinal=r['Prev. Chegada Final'],late=upper(r['SLA Final']).includes('FORA DO PRAZO'),days=r.__dias||0,status=r.__etapa||norm(r['Status Final'])||'Em acompanhamento',nf=norm(r['NF Origem'])||'—',nfdNo=norm(m.nfd?.v||r.NFD)||'—',cteNo=norm(m.cte?.v||r['CT-e'])||'—';let steps='';steps+=timelineStep('Solicitação',sol,null,firstMissing===0,late,'Registro inicial');steps+=timelineStep('Emissão NFD',nfd,sol,firstMissing===1,late,nfdNo==='—'?'Documento pendente':'NFD '+nfdNo);steps+=timelineStep('Emissão CT-e',cte,nfd,firstMissing===2,late,cteNo==='—'?'Documento pendente':'CT-e '+cteNo);steps+=timelineStep('Coleta',col,nfd,firstMissing===3,late,'Coleta do material');steps+=timelineStep('Chegada ao XD',xd,col,firstMissing===4,late,sem?'Fluxo sem XD':'Centro de distribuição',sem);steps+=timelineStep('Transferência final',env,sem?col:xd,firstMissing===5,late,'Rumo à Hyundai');steps+=timelineStep('Chegada Hyundai',fin,env||xd||col,firstMissing===6,late,'Conclusão da jornada');let msg=completed?(late?'Processo concluído fora do prazo'+(tlDate(fin)!=='—'?' em '+tlDate(fin):'')+'. Jornada encerrada.':'Processo concluído no prazo'+(tlDate(fin)!=='—'?' em '+tlDate(fin):'')+'. Jornada encerrada.'):(late?'Prazo de referência excedido. O processo permanece em acompanhamento pela equipe responsável.':'Processo dentro do prazo de referência e em acompanhamento.');let safeDays=Number.isFinite(Number(days))?Number(days):0,tipo=norm(r.Tipo)||'—';return `<div class="tl-summary"><div class="tl-status ${late&&!completed?'late':''}"><small>Status atual</small><strong>${tlSafe(status)}</strong></div><div><small>NF de origem</small><strong>${tlSafe(nf)}</strong></div><div><small>NFD</small><strong>${tlSafe(nfdNo)}</strong></div><div><small>Tipo</small><strong>${tlSafe(tipo)}</strong></div><div><small>Previsão de coleta</small><strong>${tlDate(r['Prev. Coleta'])}</strong></div><div><small>Previsão Hyundai</small><strong>${tlDate(prevFinal)}</strong></div><div><small>Tempo na etapa</small><strong>${safeDays} dia(s)</strong></div></div><div class="tl-track-wrap"><div class="tl-track">${steps}</div></div><div class="tl-foot"><div class="tl-client-note"><small>Comunicação ao cliente</small><b>${msg}</b></div><div><small>Última atualização</small><b>${tlDate(r.__inicio||fin||env||xd||col||nfd||sol)}</b></div><div><small>Origem</small><b>${tlSafe((norm(r.Cidade)||'—')+' / '+(norm(r.UF)||'—'))}</b></div><div><small>Destino</small><b>Hyundai • Araçariguama</b></div></div>`}
 function timelinePanel(){let r=timelineSelectedId?tlFind(timelineSelectedId):null;return `<div class="panel timeline-exec" id="timelineExecutive"><div class="tl-head"><div><div class="tl-title">📦 Timeline do processo • acompanhamento ponta a ponta</div><div class="tl-sub">Selecione na tabela, pesquise um documento ou clique nos cards e gráficos para carregar a pendência prioritária do filtro.</div></div><div class="tl-tools"><div class="tl-search"><input id="timelineSearchInput" placeholder="NF, NFD, CT-e ou processo" onkeydown="if(event.key==='Enter')timelineSearch()"><button onclick="timelineSearch()">Buscar</button></div><select id="timelineProcessSelect" class="tl-select" onchange="if(this.value)timelineSelect(this.value)">${tlOptions()}</select></div></div><div id="timelineHost">${r?timelineBody(r):'<div class="tl-empty"><b>Selecione um processo para visualizar a jornada</b>Clique em “Ver jornada” na tabela, use a pesquisa ou interaja com um card ou gráfico acima.</div>'}</div></div>`}
 const timelineBasePendCols=pendCols;
 pendCols=function(){let cols=timelineBasePendCols();if(!cols.some(c=>c[0]==='Jornada'))cols.push(['Jornada',r=>`<button class="tl-open" onclick="event.stopPropagation();timelineSelect('${tlSafe(tlId(r))}')">Ver jornada →</button>`]);return cols}
@@ -614,7 +614,8 @@ try{if(current==='pendencias')renderAll(true)}catch(e){console.error('Timeline:'
 .pending-history-note{font-size:11px;color:var(--muted);font-weight:600}
 @media(max-width:980px){.pending-history-grid{grid-template-columns:1fr}.pending-history-grid .chartbox{height:300px}}
 
-.pending-history-grid{grid-template-columns:minmax(0,.72fr) minmax(0,1.65fr)}
+.pending-history-grid{grid-template-columns:minmax(300px,.55fr) minmax(700px,1.85fr)}
+.pending-history-grid .chart-panel:nth-child(2){min-width:700px}
 #pendingHistoryStack{width:100%!important;height:100%!important}
 @media(max-width:980px){.pending-history-grid .chartbox{height:330px}}
 </style>
@@ -647,7 +648,7 @@ function pendingHistoryPanel(){
 }
 const pendingHistoryValues={id:'pendingHistoryValues',afterDatasetsDraw(chart,args,opts){
  const ctx=chart.ctx;ctx.save();ctx.font='700 10px Segoe UI';ctx.textAlign='center';
- if(opts?.totals){chart.data.labels.forEach((_,i)=>{let top=Infinity,x=0,total=0;chart.data.datasets.forEach((ds,di)=>{if(!chart.isDatasetVisible(di))return;const el=chart.getDatasetMeta(di).data[i],v=Number(ds.data[i]||0);if(el){top=Math.min(top,el.y);x=el.x;if(v>0){const h=Math.abs(el.base-el.y);ctx.font='800 10px Segoe UI';ctx.fillStyle=di===1?'#3b2b00':'#fff';ctx.textBaseline='middle';ctx.font=h<18?'900 9px Segoe UI':'800 10px Segoe UI';ctx.fillText(v.toLocaleString('pt-BR'),el.x,(el.y+el.base)/2)}}total+=v});if(Number.isFinite(top)){ctx.fillStyle=getComputedStyle(document.body).getPropertyValue('--text');ctx.textBaseline='bottom';ctx.font='800 11px Segoe UI';ctx.fillText(total.toLocaleString('pt-BR'),x,top-6)}})}
+ if(opts?.totals){chart.data.labels.forEach((_,i)=>{let top=Infinity,x=0,total=0;chart.data.datasets.forEach((ds,di)=>{if(!chart.isDatasetVisible(di))return;const el=chart.getDatasetMeta(di).data[i],v=Number((ds.actualData||ds.data)[i]||0);if(el){top=Math.min(top,el.y);x=el.x;const h=Math.abs(el.base-el.y);ctx.font=h<18?'900 9px Segoe UI':'800 10px Segoe UI';ctx.fillStyle=di===1?'#3b2b00':'#fff';ctx.textBaseline='middle';ctx.fillText(v.toLocaleString('pt-BR'),el.x,(el.y+el.base)/2)}total+=v});if(Number.isFinite(top)){ctx.fillStyle=getComputedStyle(document.body).getPropertyValue('--text');ctx.textBaseline='bottom';ctx.font='800 11px Segoe UI';ctx.fillText(total.toLocaleString('pt-BR'),x,top-6)}})}
  else {const meta=chart.getDatasetMeta(0);ctx.fillStyle=getComputedStyle(document.body).getPropertyValue('--text');ctx.textBaseline='bottom';meta.data.forEach((el,i)=>ctx.fillText(Number(chart.data.datasets[0].data[i]).toLocaleString('pt-BR'),el.x,el.y-7))}
  ctx.restore();
 }};
@@ -661,8 +662,8 @@ function drawPendingHistory(){
  charts.pendingHistoryLine?.destroy();charts.pendingHistoryStack?.destroy();
  const text=getComputedStyle(document.body).getPropertyValue('--text'),muted=getComputedStyle(document.body).getPropertyValue('--muted');
  charts.pendingHistoryLine=new Chart(line,{type:'line',plugins:[pendingHistoryValues],data:{labels,datasets:[{label:'Total de pendências',data:totals,borderColor:'#123f70',backgroundColor:'#123f70',pointBackgroundColor:'#fff',pointBorderColor:'#123f70',pointBorderWidth:3,pointRadius:4,tension:.25,fill:false}]},options:{responsive:true,maintainAspectRatio:false,layout:{padding:{top:28,right:12,left:8}},plugins:{legend:{display:false}},scales:{x:{ticks:{color:muted},grid:{color:'rgba(148,163,184,.22)'}},y:{beginAtZero:true,suggestedMax:Math.max(...totals,0)*1.18,ticks:{color:muted},grid:{display:false}}}}});
- const sets=[['No Prazo','on','#39a852'],['Atenção','attention','#f4b400'],['Atraso','late','#ef3340'],['Busca e Resgate','rescue','#7693b5'],['Extravio','loss','#123f70']].map(([label,key,color])=>({label,data:pendingHistory.map(r=>r[key]),backgroundColor:color,borderWidth:0,barPercentage:.96,categoryPercentage:.88,maxBarThickness:180,minBarLength:16}));
- charts.pendingHistoryStack=new Chart(stack,{type:'bar',plugins:[pendingHistoryValues],data:{labels,datasets:sets},options:{responsive:true,maintainAspectRatio:false,layout:{padding:{top:30,right:4,bottom:8,left:6}},plugins:{pendingHistoryValues:{totals:true},legend:{position:'right',reverse:true,labels:{boxWidth:8,boxHeight:8,padding:8,usePointStyle:true,pointStyle:'circle',color:text,font:{size:10,weight:'600'}}},tooltip:{mode:'index',intersect:false}},scales:{x:{stacked:true,ticks:{color:muted},grid:{display:false}},y:{stacked:true,beginAtZero:true,suggestedMax:Math.max(...totals,0)*1.16,ticks:{color:muted},grid:{color:'rgba(148,163,184,.18)'}}}}});
+ const sets=[['No Prazo','on','#39a852'],['Atenção','attention','#f4b400'],['Atraso','late','#ef3340'],['Busca e Resgate','rescue','#7693b5'],['Extravio','loss','#123f70']].map(([label,key,color])=>({label,actualData:pendingHistory.map(r=>r[key]),data:pendingHistory.map(r=>r[key]===0?0.0001:r[key]),backgroundColor:color,borderWidth:0,barPercentage:.96,categoryPercentage:.88,maxBarThickness:180,minBarLength:16}));
+ charts.pendingHistoryStack=new Chart(stack,{type:'bar',plugins:[pendingHistoryValues],data:{labels,datasets:sets},options:{responsive:true,maintainAspectRatio:false,layout:{padding:{top:30,right:18,bottom:8,left:6}},plugins:{pendingHistoryValues:{totals:true},legend:{position:'right',align:'center',reverse:true,fullSize:true,labels:{boxWidth:9,boxHeight:9,padding:10,usePointStyle:true,pointStyle:'circle',color:text,font:{size:10,weight:'700'}}},tooltip:{mode:'index',intersect:false}},scales:{x:{stacked:true,ticks:{color:muted},grid:{display:false}},y:{stacked:true,beginAtZero:true,suggestedMax:Math.max(...totals,0)*1.16,ticks:{color:muted},grid:{color:'rgba(148,163,184,.18)'}}}}});
 }
 const _pagePendHistory=pagePend;
 pagePend=function(){return pendingHistoryPanel()+_pagePendHistory()}
@@ -819,6 +820,7 @@ timelineBody=function(r){
  let firstMissing=flow.findIndex(x=>!tlDateVal(x.v)&&!x.skip);if(firstMissing<0)firstMissing=flow.length-1;
  const active=k=>flow[firstMissing]?.k===k;
  let prevFinal=r['Prev. Chegada Final'],late=upper(r['SLA Final']).includes('FORA DO PRAZO'),days=r.__dias||0,status=r.__etapa||norm(r['Status Final'])||'Em acompanhamento',nf=norm(r['NF Origem'])||'—';
+ const finalStatus=upper(r._statusF||r['Status Final']),finalSla=upper(r['SLA Final']),completed=finalStatus==='ENTREGUE'||finalStatus==='CONCLUÍDO'||finalStatus==='CONCLUIDO'||finalSla.startsWith('REALIZADO')||!!tlDateVal(fin);
  let steps='';
  steps+=timelineStep('Solicitação',sol,null,active('sol'),late,'Registro inicial');
  steps+=timelineStep('Emissão NFD',nfd,sol,active('nfd'),late,nfdNo==='—'?'Documento pendente':'NFD '+nfdNo);
@@ -830,7 +832,7 @@ timelineBody=function(r){
   steps+=timelineStep('Emissão CT-e',cte,col||nfd,active('cte'),late,cteNo==='—'?'Documento pendente':'CT-e '+cteNo);
  }
  steps+=timelineStep('Chegada ao XD',xd,col,active('xd'),late,sem?'Fluxo sem XD':'Centro de distribuição',sem);
- steps+=timelineStep('Transferência final',env,sem?col:xd,active('env'),late,'Rumo à Hyundai');
+ steps+=timelineStep('Transferência final',env,sem?col:xd,active('env'),late,'Rumo à Hyundai',completed&&!tlDateVal(env));
  steps+=timelineStep('Chegada Hyundai',fin,env||xd||col,active('fin'),late,'Conclusão da jornada');
  let msg=late?'Prazo de referência excedido. O processo permanece em acompanhamento pela equipe responsável.':'Processo dentro do prazo de referência e em acompanhamento.';
  let safeDays=Number.isFinite(Number(days))?Number(days):0,tipo=norm(r.Tipo)||'—';
@@ -911,4 +913,142 @@ timelineSearch=function(){
  const r=tlFind(v);if(r)timelineSelect(tlId(r));else alert('Nenhuma pendência encontrada para este documento no filtro atual.');
 };
 </script>
+
+<script id="timelineGeneralV54">
+/* Timeline na Visão Geral: usa todos os processos do filtro atual, incluindo concluídos,
+   pendências, extravios, cancelados e demais classificações. */
+let timelineGeneralSelectedId = '';
+
+function tlGeneralRows(){
+  return (filtered || []).slice();
+}
+
+function tlGeneralPriority(r){
+  const status = upper(r._statusF || r['Status Final']);
+  const sla = upper(r['SLA Final']);
+  let score = 0;
+  if (status === 'EXTRAVIO' || sla === 'EXTRAVIO' || sla === '0X2A') score += 500;
+  if (status.includes('PENDENTE') || sla.includes('PENDENTE')) score += 300;
+  if (sla.includes('FORA DO PRAZO')) score += 180;
+  if (status === 'ENTREGUE' || sla.includes('REALIZADO')) score += 80;
+  score += (Number(r._sev) || 0) * 5 + (Number(r._dias) || 0) / 1000;
+  return score;
+}
+
+function tlGeneralFind(q){
+  q = dn(q);
+  if (!q) return null;
+  const currentRows = tlGeneralRows();
+  const exact = currentRows.filter(r => [r['NF Origem'], r.NFD, r['CT-e'], r.Processo]
+    .some(v => valid(v) && dn(v) === q));
+  if (exact.length) return exact.sort((a,b) => tlGeneralPriority(b) - tlGeneralPriority(a))[0];
+  const partial = currentRows.filter(r => matchQ(r, q));
+  if (partial.length) return partial.sort((a,b) => tlGeneralPriority(b) - tlGeneralPriority(a))[0];
+  const allExact = (data || []).filter(r => [r['NF Origem'], r.NFD, r['CT-e'], r.Processo]
+    .some(v => valid(v) && dn(v) === q));
+  return allExact.sort((a,b) => tlGeneralPriority(b) - tlGeneralPriority(a))[0] || null;
+}
+
+function tlGeneralOptions(){
+  const rows = tlGeneralRows().slice().sort((a,b) => tlGeneralPriority(b) - tlGeneralPriority(a)).slice(0,1200);
+  return '<option value="">Selecione um processo do filtro atual</option>' + rows.map(r => {
+    const id = tlId(r);
+    const status = norm(r._statusF || r['Status Final']) || 'Sem status';
+    const lab = `NF ${norm(r['NF Origem']) || '—'} • NFD ${norm(r.NFD) || '—'} • ${status} • ${norm(r.Cidade) || 'Sem cidade'}/${norm(r.UF) || '—'}`;
+    return `<option value="${tlSafe(id)}" ${id === timelineGeneralSelectedId ? 'selected' : ''}>${tlSafe(lab)}</option>`;
+  }).join('');
+}
+
+function timelineGeneralSelect(v, scroll=true){
+  const r = tlGeneralFind(v);
+  if (!r) return;
+  timelineGeneralSelectedId = tlId(r);
+  const host = document.getElementById('timelineGeneralHost');
+  if (host) host.innerHTML = timelineBody(r);
+  const sel = document.getElementById('timelineGeneralProcessSelect');
+  if (sel) sel.value = timelineGeneralSelectedId;
+  if (scroll) document.getElementById('timelineGeneralExecutive')?.scrollIntoView({behavior:'smooth', block:'center'});
+}
+
+function timelineGeneralSearch(){
+  const value = document.getElementById('timelineGeneralSearchInput')?.value.trim();
+  if (!value) return;
+  const r = tlGeneralFind(value);
+  if (r) timelineGeneralSelect(tlId(r));
+  else alert('Processo não encontrado na base ou no filtro atual.');
+}
+
+function timelineGeneralAuto(){
+  const rows = tlGeneralRows().slice().sort((a,b) => tlGeneralPriority(b) - tlGeneralPriority(a));
+  if (rows.length) timelineGeneralSelect(tlId(rows[0]), false);
+}
+
+function timelineGeneralPanel(){
+  let r = timelineGeneralSelectedId ? tlGeneralFind(timelineGeneralSelectedId) : null;
+  if (!r) r = tlGeneralRows().slice().sort((a,b) => tlGeneralPriority(b) - tlGeneralPriority(a))[0] || null;
+  if (r) timelineGeneralSelectedId = tlId(r);
+  return `<div class="panel timeline-exec" id="timelineGeneralExecutive" style="margin:12px 0">
+    <div class="tl-head">
+      <div>
+        <div class="tl-kicker">Visão consolidada da operação</div>
+        <div class="tl-title">📦 Timeline do processo • acompanhamento ponta a ponta</div>
+        <div class="tl-sub">Exibe todos os casos do filtro atual: concluídos, pendências, extravios, cancelados e demais status.</div>
+      </div>
+      <div class="tl-tools">
+        <div class="tl-search">
+          <input id="timelineGeneralSearchInput" placeholder="NF, NFD, CT-e ou processo" onkeydown="if(event.key==='Enter')timelineGeneralSearch()">
+          <button onclick="timelineGeneralSearch()">Buscar</button>
+        </div>
+        <select id="timelineGeneralProcessSelect" class="tl-select" onchange="if(this.value)timelineGeneralSelect(this.value)">${tlGeneralOptions()}</select>
+      </div>
+    </div>
+    <div id="timelineGeneralHost">${r ? timelineBody(r) : '<div class="tl-empty"><b>Nenhum processo no filtro atual</b>Ajuste os filtros da Visão Geral para visualizar a jornada.</div>'}</div>
+  </div>`;
+}
+
+const _pageGeralTimelineV54 = pageGeral;
+pageGeral = function(){
+  const html = _pageGeralTimelineV54();
+  const marker = '<div id="ttGeralHost">';
+  return html.includes(marker) ? html.replace(marker, timelineGeneralPanel() + marker) : html + timelineGeneralPanel();
+};
+
+/* Mantém a seleção válida depois de filtros, cards ou gráficos da Visão Geral. */
+document.addEventListener('click', e => {
+  if (current !== 'geral') return;
+  if (e.target.closest('.cards .card,.chart-panel canvas,.hbar-row')) {
+    setTimeout(timelineGeneralAuto, 220);
+  }
+}, true);
+
+try { if (current === 'geral') renderAll(true); } catch (e) { console.error('Timeline Visão Geral:', e); }
+</script>
+
+
+<script id="timelineCompletedFinalFixV56">
+/* Correção final aplicada após todas as versões da timeline. */
+const _timelineBodyCompletedFinalFix = timelineBody;
+timelineBody = function(r){
+  let html = _timelineBodyCompletedFinalFix(r);
+  const m = r.__m || {};
+  const fin = m.fin?.v || r['Chegada Hyundai'];
+  const status = upper(r._statusF || r['Status Final'] || r.__etapa);
+  const sla = upper(r['SLA Final']);
+  const completed = status === 'ENTREGUE' || status === 'CONCLUÍDO' || status === 'CONCLUIDO' || sla.startsWith('REALIZADO') || !!tlDateVal(fin);
+  if (!completed) return html;
+  const late = sla.includes('FORA DO PRAZO');
+  const finalDate = tlDate(fin);
+  const msg = late
+    ? `Processo concluído fora do prazo${finalDate !== '—' ? ' em ' + finalDate : ''}. Jornada encerrada.`
+    : `Processo concluído no prazo${finalDate !== '—' ? ' em ' + finalDate : ''}. Jornada encerrada.`;
+  html = html
+    .replace('Prazo de referência excedido. O processo permanece em acompanhamento pela equipe responsável.', msg)
+    .replace('Processo dentro do prazo de referência e em acompanhamento.', msg)
+    .replace('<div class="tl-status late">', '<div class="tl-status">');
+  return html;
+};
+try { if (current === 'geral' || current === 'pendencias') renderAll(true); }
+catch(e) { console.error('Correção final dos concluídos:', e); }
+</script>
+
 </body></html>

@@ -294,7 +294,8 @@ function journey(r,today){let nfd=kx(r.NFD),cte=kx(r['CT-e']),nf=kx(r['NF Origem
  let mo=valid(r['Ocorrência'])?[clean(r['Ocorrência']),'SIT']:valid(r['Observação'])?[clean(r['Observação']),'SIT']:c&&valid(c.obs)?[clean(c.obs),'CONJUNTA']:s&&valid(s.cat)?[clean(s.cat),'SAC']:['Não informado',null];r.__motivo=mo[0];r.__motivoSrc=mo[1];
  if(!isPend(r)){r.__etapa=upper(r['Status Final'])==='ENTREGUE'?'Concluído':'Fora da jornada';r.__farol='—';return}
  let fv=m.fin.v,end=today;if(fv&&iso(fv))end=new Date(iso(fv)+'T00:00:00');
- let et=fv?'Entrega CD':(!m.nfd.v&&!isDev)?'Aguarda NFD':!m.cte.v?'Emissão CT-e':!m.col.v?'Coleta realizada':'Entrega CD',st,fa,cont,lm=null,val=0,prev=null,dt='';
+ let autoStatus=dn(r['Status Automático']||c?.status);
+ let et=fv?'Entrega CD':(!m.nfd.v&&!isDev)?'Aguarda NFD':(!m.cte.v&&autoStatus==='COLETA EFETUADA')?'Emissão CT-e':!m.col.v?'Coleta realizada':'Entrega CD',st,fa,cont,lm=null,val=0,prev=null,dt='';
  if(et==='Aguarda NFD'){st=sol;val=dcal(st,end);lm=5;fa=cls(val,[3,5,7,8]);cont=val+' dias corridos';prev=addD(st,5);dt='NFD ainda não localizada na SIT, CONJUNTA ou SAC.'}
  else if(et==='Emissão CT-e'){st=m.dtNFD.v||sol;val=dcal(st,end);lm=1;fa=cls(val*24,[12,24,48,72]);cont=val+' dias corridos';prev=addD(st,1);dt='NFD localizada, CT-e ainda não informado.'}
  else if(et==='Coleta realizada'){st=iso(r['Data Emissão'])||iso(r['Prev. Coleta'])||sol;val=dub(st,end);let cap=CAPS.has(dn(r.Cidade));lm=cap?3:5;fa=cls(val,cap?[2,3,5,7]:[4,5,7,9]);cont=val+' dias úteis ('+(cap?'capital':'interior')+')';prev=addDU(st,lm);dt='CT-e disponível, aguardando confirmação da coleta.'}
@@ -543,6 +544,7 @@ async function loadWorkbookFile(file){
   const byNfd=uniqueMap(sit,r=>r.NFD),byCte=uniqueMap(sit,r=>r['CT-e']),byNf=uniqueMap(sit,r=>r['NF Origem']);
   importBtn.textContent='⏳ 4/5 Consolidando '+rows.length.toLocaleString('pt-BR')+' processos...';await loaderYield();
   data=rows.map(row=>{
+    const prefer=(sitVal,conVal)=>valid(sitVal)?sitVal:conVal;
     const nfd=kx(row[14]).replace(/^0+/,''),cte=kx(row[15]).replace(/^0+/,''),nf=kx(row[8]).replace(/^0+/,'');
     const base=(nfd&&byNfd.get(nfd))||(cte&&byCte.get(cte))||(nf&&byNf.get(nf))||{};
     const js=norm(row[26]),jsu=upper(js),sa=norm(row[23]);
@@ -555,7 +557,7 @@ async function loadWorkbookFile(file){
     else {sla=base['SLA Final']||js||'';status=base['Status Final']||'';}
     const transp=row[3],uf=row[4],cidade=row[5];
     if(!status)status=!valid(nfd)?'Pendente NFD':!valid(cte)?'Pendente CT-e':!valid(val(row,'Coleta Efetuada'))?'Pendente coleta':!valid(val(row,'Recebido XD Diadema'))&&!semXD({UF:uf,Cidade:cidade,Transportador:transp})?'Pendente entrega ao XD':'Pendente entrega final';
-    return enrich({...base,Processo:row[0],DN:row[1],Remetente:row[2],Transportador:transp,UF:uf,Cidade:cidade,'Pedido TOTVS':val(row,'PEDIDO TOTVS'),'Pedido AUTOWARE':val(row,'PEDIDO AUTOWARE'),'NF Origem':row[8],Tipo:row[9],'Categoria Problema':val(row,'CATEGORIA PROBLEMA'),'Problema Detalhado':val(row,'PROBLEMA DETALHADO'),'Data Recebimento':loaderDate(row[12]),'Data Solicitação':loaderDate(row[12]),'Data NFD':loaderDate(row[13]),NFD:row[14],'CT-e':row[15],'Prev. Coleta':loaderDate(row[16]),'Data Coleta':loaderDate(row[17]),'Chegada Diadema':loaderDate(row[18]),'Envio Araçariguama':loaderDate(row[19]),'Chegada Hyundai':finalDate,Conferência:loaderDate(row[21]),'NFD Lançada':loaderDate(row[22]),'Status Automático':norm(row[23]),Observação:row[24],'Prev. Chegada Final':loaderDate(row[25]),'SLA Final':sla,'Status Final':status,'Dias sem Atualiz.':row[27],Alerta:row[28],Região:row[29],'Valor NF':row[30],'Transportador Responsavel':base['Transportador Responsavel']||transp,__fonte:'CONJUNTA'});
+    return enrich({...base,Processo:row[0],DN:row[1],Remetente:row[2],Transportador:transp,UF:uf,Cidade:cidade,'Pedido TOTVS':val(row,'PEDIDO TOTVS'),'Pedido AUTOWARE':val(row,'PEDIDO AUTOWARE'),'NF Origem':row[8],Tipo:row[9],'Categoria Problema':val(row,'CATEGORIA PROBLEMA'),'Problema Detalhado':val(row,'PROBLEMA DETALHADO'),'Data Recebimento':loaderDate(prefer(base['Data Recebimento'],row[12])),'Data Solicitação':loaderDate(prefer(base['Data Solicitação'],row[12])),'Data NFD':loaderDate(prefer(base['DATA EMISSÃO']??base['Data NFD'],row[13])),NFD:prefer(base.NFD,row[14]),'CT-e':prefer(base['CT-e'],row[15]),'Prev. Coleta':loaderDate(prefer(base['Prev. Coleta'],row[16])),'Data Coleta':loaderDate(prefer(base['Data Coleta'],row[17])),'Chegada Diadema':loaderDate(prefer(base['Chegada Diadema'],row[18])),'Envio Araçariguama':loaderDate(row[19]),'Chegada Hyundai':loaderDate(prefer(base['Chegada Hyundai'],finalDate)),Conferência:loaderDate(row[21]),'NFD Lançada':loaderDate(row[22]),'Status Automático':norm(row[23]),Observação:row[24],'Prev. Chegada Final':loaderDate(prefer(base['Prev. Chegada Final'],row[25])),'SLA Final':sla,'Status Final':status,'Dias sem Atualiz.':row[27],Alerta:row[28],Região:row[29],'Valor NF':row[30],'Transportador Responsavel':base['Transportador Responsavel']||transp,__fonte:'CONJUNTA'});
   });
   const chk={cnp:data.filter(r=>upper(r['SLA Final'])==='REALIZADO NO PRAZO').length,cfp:data.filter(r=>upper(r['SLA Final'])==='REALIZADO FORA DO PRAZO').length,pnp:data.filter(r=>upper(r['SLA Final'])==='PENDENTE NO PRAZO').length,pfp:data.filter(r=>upper(r['SLA Final'])==='PENDENTE FORA DO PRAZO').length};
   const totalClassificado=chk.cnp+chk.cfp+chk.pnp+chk.pfp;
@@ -1051,4 +1053,23 @@ try { if (current === 'geral' || current === 'pendencias') renderAll(true); }
 catch(e) { console.error('Correção final dos concluídos:', e); }
 </script>
 
+
+<script id="pendingCardsConsolidatedFixV57">
+/* Cards das pendencias: universo da CONJUNTA e fase definida pelos eventos consolidados SIT + CONJUNTA. */
+function pendingPhaseV57(r){
+  const m=r.__m||{};
+  const collected=valid(m.col?.v||r['Data Coleta']);
+  const arrivedXD=valid(m.xd?.v||r['Chegada Diadema']);
+  if(!collected)return 'Aguardando coleta';
+  if(!r.__semXD&&!arrivedXD)return 'Envio ao XD';
+  return 'Entrega final';
+}
+pendingCards=function(p){
+  p.forEach(r=>r.__pendingPhase=pendingPhaseV57(r));
+  const n=fn=>p.filter(fn).length;
+  return `<div class="cards">${card('Pendências em aberto',p.length)}${card('No prazo (SIT)',n(r=>upper(r['SLA Final'])==='PENDENTE NO PRAZO'),'var(--green)','SLA Final','Pendente No Prazo')}${card('Fora do prazo (SIT)',n(r=>upper(r['SLA Final'])==='PENDENTE FORA DO PRAZO'),'var(--red)','SLA Final','Pendente Fora do Prazo')}${card('Aguardando coleta',n(r=>r.__pendingPhase==='Aguardando coleta'),'var(--yellow)','__pendingPhase','Aguardando coleta')}${card('Envio ao XD',n(r=>r.__pendingPhase==='Envio ao XD'),'#6941c6','__pendingPhase','Envio ao XD')}${card('Entrega final',n(r=>r.__pendingPhase==='Entrega final'),'#0e9384','__pendingPhase','Entrega final')}<div class="card" style="border-top-color:#0e9384" onclick="fonteClick()"><div class="lab">🔗 Cruzadas CONJUNTA/SAC</div><div class="num">${n(r=>r.__fonte!=='SIT').toLocaleString('pt-BR')}</div></div></div>`;
+};
+if(!filterDefs.some(x=>x[1]==='__pendingPhase'))filterDefs.push(['Fase da pendência','__pendingPhase']);
+try{if(current==='pendencias')renderAll(true)}catch(e){console.error('Cards consolidados:',e)}
+</script>
 </body></html>

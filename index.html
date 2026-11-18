@@ -266,7 +266,7 @@ filterDefs.push(['Etapa atual (jornada)','__etapa'],['Farol SLA','__farol'],['Fo
 /* ---- leitura das abas CONJUNTA e SAC ---- */
 function loadExtra(wb,xd){[CON_N,CON_C,CON_F,SAC_N,SAC_F].forEach(m=>m.clear());const fs=n=>wb.SheetNames.find(x=>upper(x)===n),rd=n=>{let s=fs(n);return s?XLSX.utils.sheet_to_json(wb.Sheets[s],{header:1,defval:null,raw:true}):[]};
  let dupC=new Set(),dupS=new Set();
- rd('CONJUNTA').forEach(w=>{if(typeof w[0]!=='number'||!(valid(w[8])||valid(w[15])))return;let o={processo:w[0],dealer:w[2],transp:w[3],nf:w[8],liab:w[9],cat:w[10],prob:w[11],dtRecl:xd(w[12]),dtSol:xd(w[13]),dtNFD:xd(w[14]),nfd:w[15],cte:w[17],colAg:xd(w[18]),colEf:xd(w[19]),motivo:w[20],xd:xd(w[21]),envA:xd(w[22]),aracr:xd(w[23]),status:w[26],obs:w[27],sla:w[29],dias:w[30],alerta:w[31],valor:w[33]};
+ rd('CONJUNTA').forEach(w=>{if(typeof w[0]!=='number'||!(valid(w[8])||valid(w[15])))return;let o={processo:w[0],dealer:w[2],transp:w[3],nf:w[8],liab:w[9],cat:w[10],prob:w[11],dtRecl:xd(w[12]),dtSol:xd(w[12]),dtNFD:xd(w[13]),nfd:w[14],cte:w[15],colAg:xd(w[16]),colEf:xd(w[17]),xd:xd(w[18]),envA:xd(w[19]),aracr:xd(w[20]),status:w[23],obs:w[24],sla:w[26],dias:w[27],alerta:w[28],valor:w[30]};
   let a=kx(o.nfd),b=kx(o.cte),f=kx(o.nf);if(a&&!CON_N.has(a))CON_N.set(a,o);if(b&&!CON_C.has(b))CON_C.set(b,o);if(f){if(CON_F.has(f))dupC.add(f);else CON_F.set(f,o)}});
  dupC.forEach(k=>CON_F.delete(k));
  rd('SAC').slice(1).forEach(w=>{if(!valid(w[3])&&!valid(w[14]))return;let o={owner:w[0],nf:w[3],dealer:w[5],cat:w[8],prob:w[9],acao:w[10],ownerAcao:w[11],setor:w[12],nfd:w[14],status:w[16],data:xd(w[6])};let a=kx(o.nfd),f=kx(o.nf);if(a&&!SAC_N.has(a))SAC_N.set(a,o);if(f){if(SAC_F.has(f))dupS.add(f);else SAC_F.set(f,o)}});
@@ -287,15 +287,15 @@ function journey(r,today){let nfd=kx(r.NFD),cte=kx(r['CT-e']),nf=kx(r['NF Origem
  let sol=iso(r['Data Solicitação']),lim=isoD(new Date(today.getTime()+30*864e5)),m={};
  const put=(k,sit,cv,sv,dt)=>{const okd=d=>!dt||(valid(d)&&iso(d)&&(!sol||iso(d)>=sol)&&iso(d)<=lim);m[k]=valid(sit)?{v:sit,src:'SIT'}:(c&&valid(cv)&&okd(cv))?{v:cv,src:'CONJUNTA'}:(s&&valid(sv)&&okd(sv))?{v:sv,src:'SAC'}:{v:null,src:null}};
  put('nfd',r.NFD,c?.nfd,s?.nfd);put('cte',r['CT-e'],c?.cte,null);put('dtNFD',null,c?.dtNFD,null,1);put('col',r['Data Coleta'],c?.colEf,null,1);put('xd',r['Chegada Diadema'],c?.xd,null,1);put('fin',r['Chegada Hyundai'],c?.aracr,null,1);
- r.__m=m;r.__con=c;r.__sac=s;let used=new Set();Object.values(m).forEach(x=>x.src&&x.src!=='SIT'&&used.add(x.src));if(c)used.add('CONJUNTA');if(s)used.add('SAC');r.__fonte=['SIT',...[...used].sort()].join(' + ');
- const isDev=dn(r.Tipo)==='DEVOLUCAO',sf=upper(r['SLA Final']),ext=sf==='EXTRAVIO'||sf==='0X2A'||upper(r.Tipo)==='EXTRAVIO',canc=sf==='CANCELADA';r.__isDev=isDev;r.__tipo=ext?'EXTRAVIO':norm(r.Tipo)||'Tipo não informado na SIT';r.__statusF=ext?'Extravio':canc?'Cancelada':isPend(r)?norm(r['Status Final']):'Entregue';r.__slaF=sf==='0X2A'?'Extravio':norm(r['SLA Final']);r.__hasNFD=valid(r.NFD)?'Com NFD':isDev?'Devolução (usa NF Origem)':'Sem NFD';r.__semXD=semXD(r);r.__rota=r.__semXD?'Direto Hyundai • Sul / interior de SP • não passa pelo XD':'Via XD Diadema';
+ r.__cteMissingPost=!valid(m.cte?.v)&&!!(valid(m.col?.v)||valid(m.xd?.v)||valid(m.fin?.v));r.__m=m;r.__con=c;r.__sac=s;let used=new Set();Object.values(m).forEach(x=>x.src&&x.src!=='SIT'&&used.add(x.src));if(c)used.add('CONJUNTA');if(s)used.add('SAC');r.__fonte=['SIT',...[...used].sort()].join(' + ');
+ r.__isDev=dn(r.Tipo)==='DEVOLUCAO';const sf=upper(r['SLA Final']),ext=sf==='EXTRAVIO'||sf==='0X2A'||upper(r.Tipo)==='EXTRAVIO',canc=sf==='CANCELADA';r.__tipo=ext?'EXTRAVIO':norm(r.Tipo)||'Tipo não informado na SIT';r.__statusF=ext?'Extravio':canc?'Cancelada':isPend(r)?norm(r['Status Final']):'Entregue';r.__slaF=sf==='0X2A'?'Extravio':norm(r['SLA Final']);r.__hasNFD=valid(r.NFD)?'Com NFD':r.__isDev?'Devolução (usa NF Origem)':'Sem NFD';r.__semXD=semXD(r);r.__rota=r.__semXD?'Direto Hyundai • Sul / interior de SP • não passa pelo XD':'Via XD Diadema';
  r.__venc=r.__prevH=r.__diverg=r.__sacOpen='—';r.__dd=null;r.__atrH=null;r.__prev=null;
  r.__txt=[c?.obs,c?.status,c?.alerta,s?.cat,s?.prob,s?.acao,s?.dealer].filter(valid).join(' ');r.__sev=-1;r.__dias=0;r.__inicio=null;r.__tempo='';r.__det='';
  let mo=valid(r['Ocorrência'])?[clean(r['Ocorrência']),'SIT']:valid(r['Observação'])?[clean(r['Observação']),'SIT']:c&&valid(c.obs)?[clean(c.obs),'CONJUNTA']:s&&valid(s.cat)?[clean(s.cat),'SAC']:['Não informado',null];r.__motivo=mo[0];r.__motivoSrc=mo[1];
  if(!isPend(r)){r.__etapa=upper(r['Status Final'])==='ENTREGUE'?'Concluído':'Fora da jornada';r.__farol='—';return}
  let fv=m.fin.v,end=today;if(fv&&iso(fv))end=new Date(iso(fv)+'T00:00:00');
  let autoStatus=dn(r['Status Automático']||c?.status);
- let et=fv?'Entrega CD':(!m.nfd.v&&!isDev)?'Aguarda NFD':(!m.cte.v&&autoStatus==='COLETA EFETUADA')?'Emissão CT-e':!m.col.v?'Coleta realizada':'Entrega CD',st,fa,cont,lm=null,val=0,prev=null,dt='';
+ let nordesteEtapa=NORDESTE_UFS_V51.has(upper(r.UF)),temEventoPosterior=!!(fv||m.xd.v||r['Envio Araçariguama']),et=temEventoPosterior?'Entrega CD':(!m.nfd.v&&!r.__isDev)?'Aguarda NFD':nordesteEtapa?(!m.cte.v?'Emissão CT-e':!m.col.v?'Coleta realizada':'Entrega CD'):(!m.col.v?'Coleta realizada':!m.cte.v?'Emissão CT-e':'Entrega CD'),st,fa,cont,lm=null,val=0,prev=null,dt='';
  if(et==='Aguarda NFD'){st=sol;val=dcal(st,end);lm=5;fa=cls(val,[3,5,7,8]);cont=val+' dias corridos';prev=addD(st,5);dt='NFD ainda não localizada na SIT, CONJUNTA ou SAC.'}
  else if(et==='Emissão CT-e'){st=m.dtNFD.v||sol;val=dcal(st,end);lm=1;fa=cls(val*24,[12,24,48,72]);cont=val+' dias corridos';prev=addD(st,1);dt='NFD localizada, CT-e ainda não informado.'}
  else if(et==='Coleta realizada'){st=iso(r['Data Emissão'])||iso(r['Prev. Coleta'])||sol;val=dub(st,end);let cap=CAPS.has(dn(r.Cidade));lm=cap?3:5;fa=cls(val,cap?[2,3,5,7]:[4,5,7,9]);cont=val+' dias úteis ('+(cap?'capital':'interior')+')';prev=addDU(st,lm);dt='CT-e disponível, aguardando confirmação da coleta.'}
@@ -591,7 +591,7 @@ let timelineSelectedId='';
 function tlSafe(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function tlId(r){return String(r?.['NF Origem']||r?.NFD||r?.['CT-e']||r?.Processo||'')}
 function tlRows(){return (filtered||[]).filter(isPend)}
-function tlDateVal(x){if(x&&typeof x==='object'&&'v' in x)x=x.v;return parseDate(x)}
+function tlDateVal(x){if(x&&typeof x==='object'&&'v' in x)x=x.v;if(x instanceof Date)return Number.isNaN(x.getTime())?null:new Date(x.getTime());return parseDate(x)}
 function tlDate(x){let d=tlDateVal(x);if(!d||Number.isNaN(d.getTime()))return '—';return new Intl.DateTimeFormat('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',timeZone:'America/Sao_Paulo'}).format(d)}
 function tlDays(a,b){a=tlDateVal(a);b=tlDateVal(b);if(!a||!b||Number.isNaN(a.getTime())||Number.isNaN(b.getTime()))return null;let n=Math.round((b.getTime()-a.getTime())/86400000);return Number.isFinite(n)?Math.max(0,n):null}
 function tlFind(q){q=dn(q);return (data||[]).find(r=>[r['NF Origem'],r.NFD,r['CT-e'],r.Processo].some(v=>valid(v)&&dn(v)===q))||(data||[]).find(r=>matchQ(r,q))}
@@ -861,13 +861,13 @@ timelineBody=function(r){
  const col=m.col?.v||r['Data Coleta'];
  const cteDate=r['Data Emissão']||r['Emissão CTRC'];
  const xd=m.xd?.v||r['Chegada Diadema'],env=r['Envio Araçariguama'],fin=m.fin?.v||r['Chegada Hyundai'],sem=!!r.__semXD;
- const events={sol:{done:!!tlDateVal(sol),date:sol},nfd:{done:valid(nfdNo),date:nfdDate},cte:{done:valid(cteNo),date:cteDate},col:{done:!!tlDateVal(col),date:col},xd:{done:sem||!!tlDateVal(xd),date:xd,skip:sem},env:{done:!!tlDateVal(env),date:env},fin:{done:!!tlDateVal(fin),date:fin}};
+ const skipXD=sem&&!tlDateVal(xd);const events={sol:{done:!!tlDateVal(sol),date:sol},nfd:{done:r.__isDev||valid(nfdNo),date:nfdDate},cte:{done:valid(cteNo),date:cteDate},col:{done:!!tlDateVal(col),date:col},xd:{done:skipXD||!!tlDateVal(xd),date:xd,skip:skipXD},env:{done:!!tlDateVal(env),date:env},fin:{done:!!tlDateVal(fin),date:fin}};
  const order=nordeste?['sol','nfd','cte','col','xd','env','fin']:['sol','nfd','col','cte','xd','env','fin'];
  let activeKey=order.find(k=>!events[k].done)||'fin';
  let prevFinal=r['Prev. Chegada Final'],late=upper(r['SLA Final']).includes('FORA DO PRAZO'),days=r.__dias||0,status=r.__etapa||norm(r['Status Final'])||'Em acompanhamento',nf=norm(r['NF Origem'])||'—';
  let steps='';
  steps+=timelineStep('Solicitação',sol,null,activeKey==='sol',late,'Registro inicial');
- steps+=timelineDocumentStep('Emissão NFD',nfdNo,nfdDate,sol,activeKey==='nfd',late,'NFD');
+ steps+=r.__isDev?timelineStep('Emissão NFD',null,sol,false,false,'Devolução utiliza NF de origem',true):timelineDocumentStep('Emissão NFD',nfdNo,nfdDate,sol,activeKey==='nfd',late,'NFD');
  if(nordeste){
   steps+=timelineDocumentStep('Emissão CT-e',cteNo,cteDate,nfdDate||sol,activeKey==='cte',late,'CT-e');
   steps+=timelineStep('Coleta',col,cteDate||nfdDate||sol,activeKey==='col',late,'Coleta do material');
@@ -875,12 +875,12 @@ timelineBody=function(r){
   steps+=timelineStep('Coleta',col,nfdDate||sol,activeKey==='col',late,'Coleta do material');
   steps+=timelineDocumentStep('Emissão CT-e',cteNo,cteDate,col||nfdDate||sol,activeKey==='cte',late,'CT-e');
  }
- steps+=timelineStep('Chegada ao XD',xd,col,activeKey==='xd',late,sem?'Fluxo sem XD':'Centro de distribuição',sem);
- steps+=timelineStep('Transferência final',env,sem?col:xd,activeKey==='env',late,'Rumo à Hyundai');
+ steps+=timelineStep('Chegada ao XD',xd,col,activeKey==='xd',late,skipXD?'Fluxo sem XD':'Centro de distribuição',skipXD);
+ steps+=timelineStep('Transferência final',env,skipXD?col:(xd||col),activeKey==='env',late,'Rumo à Hyundai');
  steps+=timelineStep('Chegada Hyundai',fin,env||xd||col,activeKey==='fin',late,'Conclusão da jornada');
  let msg=late?'Prazo de referência excedido. O processo permanece em acompanhamento pela equipe responsável.':'Processo dentro do prazo de referência e em acompanhamento.';
- let safeDays=Number.isFinite(Number(days))?Number(days):0,tipo=norm(r.Tipo)||'—';
- return `<div class="tl-summary"><div class="tl-status ${late?'late':''}"><small>Status atual</small><strong>${tlSafe(status)}</strong></div><div><small>NF de origem</small><strong>${tlSafe(nf)}</strong></div><div><small>NFD</small><strong>${tlSafe(nfdNo||'—')}</strong></div><div><small>Tipo</small><strong>${tlSafe(tipo)}</strong></div><div><small>Previsão de coleta</small><strong>${tlDate(r['Prev. Coleta'])}</strong></div><div><small>Previsão Hyundai</small><strong>${tlDate(prevFinal)}</strong></div><div><small>Tempo na etapa</small><strong>${safeDays} dia(s)</strong></div></div><div class="tl-track-wrap"><div class="tl-track">${steps}</div></div><div class="tl-foot"><div class="tl-client-note"><small>Comunicação ao cliente</small><b>${msg}</b></div><div><small>Última atualização</small><b>${tlDate(r.__inicio||fin||env||xd||col||nfdDate||sol)}</b></div><div><small>Origem</small><b>${tlSafe((norm(r.Cidade)||'—')+' / '+(norm(r.UF)||'—'))}</b></div><div><small>Destino</small><b>Hyundai • Araçariguama</b></div></div>`;
+ let safeDays=Number.isFinite(Number(days))?Number(days):0,tipo=norm(r.Tipo)||'—',nfdDisplay=r.__isDev?'Usa NF origem':(nfdNo||'—');const latestUpdate=[sol,nfdDate,cteDate,col,xd,env,fin].map(tlDateVal).filter(Boolean).sort((a,b)=>b-a)[0]||null;
+ return `<div class="tl-summary"><div class="tl-status ${late?'late':''}"><small>Status atual</small><strong>${tlSafe(status)}</strong></div><div><small>NF de origem</small><strong>${tlSafe(nf)}</strong></div><div><small>NFD</small><strong>${tlSafe(nfdDisplay)}</strong></div><div><small>Tipo</small><strong>${tlSafe(tipo)}</strong></div><div><small>Previsão de coleta</small><strong>${tlDate(r['Prev. Coleta'])}</strong></div><div><small>Previsão Hyundai</small><strong>${tlDate(prevFinal)}</strong></div><div><small>Tempo na etapa</small><strong>${safeDays} dia(s)</strong></div></div><div class="tl-track-wrap"><div class="tl-track">${steps}</div></div><div class="tl-foot"><div class="tl-client-note"><small>Comunicação ao cliente</small><b>${msg}</b></div><div><small>Última atualização</small><b>${tlDate(latestUpdate)}</b></div><div><small>Origem</small><b>${tlSafe((norm(r.Cidade)||'—')+' / '+(norm(r.UF)||'—'))}</b></div><div><small>Destino</small><b>Hyundai • Araçariguama</b></div></div>`;
 };
 </script>
 
@@ -1071,5 +1071,26 @@ pendingCards=function(p){
 };
 if(!filterDefs.some(x=>x[1]==='__pendingPhase'))filterDefs.push(['Fase da pendência','__pendingPhase']);
 try{if(current==='pendencias')renderAll(true)}catch(e){console.error('Cards consolidados:',e)}
+</script>
+
+<style id="cteMissingPostAlertCssV53">
+.cte-missing-alert{margin:10px 0 2px;padding:10px 12px;border:1px solid #f79009;border-left:5px solid #f79009;border-radius:10px;background:#fffaeb;color:#7a2e0e;font-size:13px;line-height:1.35}
+.cte-missing-alert b{display:block;margin-bottom:2px;color:#b54708}
+</style>
+<script id="cteMissingPostAlertV53">
+/* Qualidade documental: alerta quando a jornada fisica avancou sem CT-e, sem rebaixar a etapa atual. */
+const _timelineBodyCteMissingPostV53=timelineBody;
+timelineBody=function(r){
+ const html=_timelineBodyCteMissingPostV53(r);
+ if(!r.__cteMissingPost)return html;
+ const alert='<div class="cte-missing-alert"><b>⚠ Alerta documental: CT-e não localizado.</b></div>';
+ return html.replace('<div class="tl-track-wrap">',alert+'<div class="tl-track-wrap">');
+};
+</script>
+
+
+<script id="journeyRegionalStageAndLatestUpdateV58">
+/* V58: fora do Nordeste, coleta antecede CT-e. Nordeste emite CT-e antes da coleta.
+   tlDateVal aceita Date nativo para exibir a data real mais recente do processo. */
 </script>
 </body></html>

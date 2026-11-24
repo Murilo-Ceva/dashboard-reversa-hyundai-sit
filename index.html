@@ -306,7 +306,7 @@ function journey(r,today){let nfd=kx(r.NFD),cte=kx(r['CT-e']),nf=kx(r['NF Origem
  if(!isPend(r)){r.__etapa=upper(r['Status Final'])==='ENTREGUE'?'Concluído':'Fora da jornada';r.__farol='—';return}
  let fv=m.fin.v,end=today;if(fv&&iso(fv))end=new Date(iso(fv)+'T00:00:00');
  let autoStatus=dn(r['Status Automático']||c?.status);
- let nordesteEtapa=NORDESTE_UFS_V51.has(upper(r.UF)),temEventoPosterior=!!(fv||m.xd.v||r['Envio Araçariguama']),et=temEventoPosterior?'Entrega CD':(!m.nfd.v&&!r.__isDev)?'Aguarda NFD':nordesteEtapa?(!m.cte.v?'Emissão CT-e':!m.col.v?'Coleta realizada':'Entrega CD'):(!m.col.v?'Coleta realizada':!m.cte.v?'Emissão CT-e':'Entrega CD'),st,fa,cont,lm=null,val=0,prev=null,dt='';
+ let nordesteEtapa=NORDESTE_UFS_V51.has(upper(r.UF)),temEventoPosterior=!!(iso(fv)||iso(m.xd.v)||iso(r['Envio Araçariguama'])),et=temEventoPosterior?'Entrega CD':(!m.nfd.v&&!r.__isDev)?'Aguarda NFD':nordesteEtapa?(!m.cte.v?'Emissão CT-e':!m.col.v?'Coleta realizada':'Entrega CD'):(!m.col.v?'Coleta realizada':!m.cte.v?'Emissão CT-e':'Entrega CD'),st,fa,cont,lm=null,val=0,prev=null,dt='';
  if(et==='Aguarda NFD'){st=sol;val=dcal(st,end);lm=5;fa=cls(val,[3,5,7,8]);cont=val+' dias corridos';prev=addD(st,5);dt='NFD ainda não localizada na SIT, CONJUNTA ou SAC.'}
  else if(et==='Emissão CT-e'){st=m.dtNFD.v||sol;val=dcal(st,end);lm=1;fa=cls(val*24,[12,24,48,72]);cont=val+' dias corridos';prev=addD(st,1);dt='NFD localizada, CT-e ainda não informado.'}
  else if(et==='Coleta realizada'){st=iso(r['Data Emissão'])||iso(r['Prev. Coleta'])||sol;val=dub(st,end);let cap=CAPS.has(dn(r.Cidade));lm=cap?3:5;fa=cls(val,cap?[2,3,5,7]:[4,5,7,9]);cont=val+' dias úteis ('+(cap?'capital':'interior')+')';prev=addDU(st,lm);dt='CT-e disponível, aguardando confirmação da coleta.'}
